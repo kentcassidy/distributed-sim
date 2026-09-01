@@ -1,0 +1,6 @@
+Today I decided to put some credential under my belt and begin development on a distributed sim of sorts.
+I want it to be plane related, physics-involved, yet be simple enough to get complete within a few weeks. I am heavily deliberating and discussing concepts with LLM tools, notably Claude, but I will be hand-writing 100% of all the C++ in this project.
+
+The LLM will be used as an assistant tool to help me organize and research the topics, mechanisms, tools, and industry standards. I may also refer to it for advice on how to improve my coding, or debug. However, all C++ source code will be crafted from scratch so I get a full understanding of the underlying mechanisms.
+
+As of 11pm tonight, I've initialized a repository, and discussed the overall goal and architecture with Claude, which output to a .html roadmap and several ADR .md files.

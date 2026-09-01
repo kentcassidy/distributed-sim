@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distributed Flight-Dynamics Federation &mdash; Project Charter v0.3.0</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   READING DOCUMENT STYLESHEET + ROADMAP NODE VOCABULARY
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#f8f7f4;--surface:#fff;--surface2:#f1f0eb;
+  --border:#d8d6cf;
+  --text:#2c2c2a;--text2:#5f5e5a;--text3:#888780;
+  --accent:#185FA5;--accent2:#0F6E56;--warn:#BA7517;--danger:#993C1D;
+  --purple:#534AB7;--teal:#0F6E56;--coral:#D85A30;--pink:#993556;--green:#639922;--navy:#1B2A4A;
+  --mono:'SF Mono','Fira Code','Consolas',monospace;
+  --sans:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --node-main:#ffd84d;--node-child:#fff0b3;
+  --node-border:#26241d;--node-text:#26241d;
+  --edge:#2b6cb0;--edge-branch:#8a897f;
+  --done-tint:#e2efdd;--done-mark:#2f7d32;
+  --next-glow:0 0 0 3px rgba(24,95,165,.28);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a1a;--surface:#242424;--surface2:#2e2e2e;
+  --border:#444;
+  --text:#d4d4d4;--text2:#a0a0a0;--text3:#707070;
+  --accent:#58a6ff;--accent2:#3fb950;--warn:#ffa657;--danger:#f0997b;
+  --purple:#afa9ec;--teal:#5dcaa5;--coral:#f0997b;--pink:#ed93b1;--green:#97c459;--navy:#85b7eb;
+  --node-main:#8a6f14;--node-child:#4a3f1d;
+  --node-border:#d9c26a;--node-text:#f2e6bb;
+  --edge:#58a6ff;--edge-branch:#7a786e;
+  --done-tint:#25372a;--done-mark:#3fb950;
+  --next-glow:0 0 0 3px rgba(88,166,255,.35);
+}}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);color:var(--text);background:var(--bg);line-height:1.7;font-size:14px}
+.container{max-width:1000px;margin:0 auto;padding:36px 24px 64px}
+
+h1{font-size:28px;font-weight:700;color:var(--navy);margin:0 0 8px;letter-spacing:-.5px}
+.subtitle{color:var(--text2);font-size:13.5px;margin-bottom:6px}
+h2{font-size:20px;font-weight:600;color:var(--navy);margin:36px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h2:first-of-type{border-top:none;padding-top:0;margin-top:20px}
+h3{font-size:16px;font-weight:600;color:var(--text);margin:22px 0 8px}
+h4{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin:18px 0 6px}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 12px 22px}
+li{margin:4px 0}
+code{font-family:var(--mono);font-size:12.5px;background:var(--surface2);padding:1px 5px;border-radius:3px}
+strong{font-weight:600;color:var(--text)}
+em{font-style:italic}
+.lead{font-size:15.5px;color:var(--text);border-left:3px solid var(--accent);
+  background:var(--surface2);padding:14px 18px;border-radius:0 6px 6px 0;margin:0 0 20px}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin:14px 0}
+.card h3{margin-top:0}
+.note{border-left:3px solid var(--accent);background:var(--surface2);padding:11px 16px;
+  border-radius:0 6px 6px 0;margin:14px 0;font-size:13.5px}
+.note.warn{border-left-color:var(--warn)}
+.note.ok{border-left-color:var(--accent2)}
+.note.danger{border-left-color:var(--danger)}
+.note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.note.warn .lbl{color:var(--warn)}
+.note.ok .lbl{color:var(--accent2)}
+.note.danger .lbl{color:var(--danger)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:14px 0}
+@media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+.gcell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px}
+.gcell .gt{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:5px}
+.gcell.yes{border-left:3px solid var(--accent2)}
+.gcell.no{border-left:3px solid var(--danger)}
+.gcell.mid{border-left:3px solid var(--warn)}
+.gcell p{font-size:13px;color:var(--text2);margin:0}
+
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+th{background:var(--navy);color:#fff;text-align:left;padding:8px 11px;font-weight:600;font-size:12px}
+@media(prefers-color-scheme:dark){th{color:#1a1a1a}}
+td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:nth-child(even){background:var(--surface2)}
+td code{font-size:11.5px}
+
+.defs{margin:12px 0}
+.defs dt{font-weight:700;color:var(--navy);font-size:13.5px;margin-top:12px;font-family:var(--mono)}
+.defs dd{margin:2px 0 0 0;font-size:13.5px;color:var(--text2)}
+
+.tabbar{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin:22px 0 0}
+.tabbtn{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+  font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--text3);
+  padding:9px 15px;cursor:pointer;border-radius:6px 6px 0 0}
+.tabbtn:hover{color:var(--text);background:var(--surface2)}
+.tabbtn.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface2)}
+.tabbtn .tnum{font-family:var(--mono);font-size:10.5px;opacity:.6;margin-right:5px}
+.panel{display:none;padding-top:6px}
+.panel.on{display:block}
+
+.topo{width:100%;height:auto;margin:16px 0;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;padding:10px}
+
+.scroll{overflow-x:auto}
+#canvas{position:relative;min-width:960px;margin-top:14px}
+#edges{position:absolute;inset:0;z-index:0;pointer-events:none}
+.node{position:absolute;z-index:1;border:2px solid var(--node-border);border-radius:10px;
+  background:var(--node-child);color:var(--node-text);padding:8px 12px;font-size:12.5px;
+  line-height:1.4;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.12)}
+.node:hover{filter:brightness(1.04)}
+.node.main{background:var(--node-main);font-weight:700;font-size:14.5px;text-align:center;padding:11px 14px;border-width:2.5px}
+.node.main .nid,.node.hub .nid{display:block;font-family:var(--mono);font-weight:600;font-size:10.5px;opacity:.65;letter-spacing:.5px}
+.node.s-done{background:var(--done-tint)}
+.node.s-done .ck{color:var(--done-mark);font-weight:800;margin-right:5px}
+.node.s-next{box-shadow:var(--next-glow),2px 2px 0 rgba(0,0,0,.12)}
+.node .chip{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px;
+  background:var(--accent);color:#fff}
+.node.s-horizon{border-style:dashed;background:var(--surface);color:var(--text)}
+.node.hub{border-style:dashed;background:var(--surface2);color:var(--text);font-weight:700;text-align:center;font-size:14px;padding:11px 14px}
+.band{position:absolute;z-index:0;border:2px dashed var(--edge-branch);border-radius:14px;
+  background:color-mix(in srgb,var(--surface) 55%,transparent)}
+.band-label{position:absolute;z-index:1;font-size:10.5px;font-weight:700;letter-spacing:1.1px;
+  text-transform:uppercase;color:var(--text3);background:var(--bg);padding:0 8px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-top:10px}
+.legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;
+  border:1.5px solid var(--node-border);vertical-align:-2px;margin-right:4px}
+
+#drawer{position:fixed;top:0;right:-430px;width:410px;max-width:92vw;height:100vh;z-index:50;
+  background:var(--surface);border-left:1px solid var(--border);box-shadow:-6px 0 24px rgba(0,0,0,.18);
+  transition:right .18s ease;padding:22px 24px;overflow-y:auto}
+#drawer.open{right:0}
+#drawer .close{float:right;cursor:pointer;font-size:20px;color:var(--text3);border:none;background:none}
+#drawer h2{font-size:19px;color:var(--navy);margin:2px 0;border:none;padding:0}
+#drawer .did{font-family:var(--mono);font-size:11px;color:var(--text3)}
+#drawer .dstatus{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;border-radius:3px;padding:1px 7px;margin:8px 0 12px;color:#fff}
+#drawer p{font-size:13.5px;margin:8px 0}
+#drawer ul{margin:6px 0 6px 18px;font-size:12.5px;color:var(--text2)}
+
+.footer{margin:34px 0 8px;padding-top:14px;border-top:1px solid var(--border);
+  font-size:11.5px;color:var(--text3)}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Distributed Flight-Dynamics Federation</h1>
+  <p class="subtitle">Project Charter v0.3.0 &mdash; IEEE 1516e &middot; C++ &middot; four weeks &middot; August 2026</p>
+  <p class="subtitle" style="color:var(--text3)">Self-contained starting document. Supersedes v0.2.0: adds the storm, the Monte&nbsp;Carlo ensemble, and the model-core / driver split.</p>
+
+  <div class="tabbar" id="tabbar">
+    <button class="tabbtn on" data-tab="t-overview"><span class="tnum">01</span>Statement</button>
+    <button class="tabbtn" data-tab="t-arch"><span class="tnum">02</span>Architecture</button>
+    <button class="tabbtn" data-tab="t-roadmap"><span class="tnum">03</span>Roadmap</button>
+    <button class="tabbtn" data-tab="t-exp"><span class="tnum">04</span>Experiments</button>
+    <button class="tabbtn" data-tab="t-process"><span class="tnum">05</span>Process</button>
+    <button class="tabbtn" data-tab="t-ref"><span class="tnum">06</span>Reference</button>
+  </div>
+
+<!-- ═══════════════════════ 01 STATEMENT ═══════════════════════ -->
+<div class="panel on" id="t-overview">
+
+  <h2>Project Statement</h2>
+
+  <p class="lead">A shared worldspace holds a large storm &mdash; a structured wind field &mdash; that
+  stochastically perturbs two aircraft flying a coupled formation. Each aircraft is owned and integrated by its
+  own federate; the only thing on the wire is entity state. The same validated physics runs in two modes: a
+  fast single-process <strong>ensemble</strong> of many randomized scenarios, and a <strong>distributed
+  federation</strong> of one scenario at a time with real network impairment. The deliverable is a statistical
+  comparison &mdash; does distributing the simulation change the distribution of outcomes? &mdash; with the run
+  set replayable in real time if wanted.</p>
+
+  <h3>Reading that statement clause by clause</h3>
+
+  <p><strong>&ldquo;A storm that stochastically perturbs two aircraft.&rdquo;</strong> A spatially-structured
+  wind field (a vortex) supplies deterministic forcing that both aircraft feel coherently; a turbulence model
+  supplies the per-run randomness. Wind enters the flight model at exactly one point &mdash; it is subtracted
+  from inertial velocity before the aerodynamics are computed.</p>
+
+  <p><strong>&ldquo;A coupled formation.&rdquo;</strong> The second aircraft holds station on its
+  dead-reckoned copy of the first. This coupling is what makes the network measurable: delay and extrapolation
+  error enter a closed physical loop and come out as station-keeping error.</p>
+
+  <p><strong>&ldquo;Each aircraft owned and integrated by its own federate.&rdquo;</strong> Entity ownership,
+  the central rule &mdash; its own section below. Nobody computes anyone else's physics.</p>
+
+  <p><strong>&ldquo;The same validated physics in two modes.&rdquo;</strong> One model core, two drivers. A
+  batch driver runs hundreds of randomized scenarios in one process for the statistics; a federation driver
+  runs single scenarios distributed, with time management and impairment. This split is the project's central
+  architectural idea and the thing that makes both the ensemble and the distributed demonstration possible.</p>
+
+  <p><strong>&ldquo;Does distributing the simulation change the distribution of outcomes?&rdquo;</strong> The
+  headline result. Run the ensemble monolithically for a baseline distribution; run a subset federated under
+  latency and dead-reckoning error; compare the <em>distributions</em>, not individual paths. This is the
+  question distributed-simulation programs genuinely worry about &mdash; whether a federated execution is still
+  valid for the analysis it is used for &mdash; answered with data.</p>
+
+  <div class="note warn">
+    <span class="lbl">Terminology, stated once and kept straight</span>
+    The ensemble is <strong>Monte&nbsp;Carlo</strong>: known inputs, random perturbations drawn per run,
+    outputs collected into a distribution &mdash; forward uncertainty propagation. It is <em>not</em>
+    <strong>MCMC</strong>. MCMC is the inverse problem &mdash; sampling a posterior over unknown parameters
+    from observed data &mdash; and it appears only in the optional storm-identification extension on the
+    horizon. Naming the ensemble &ldquo;MCMC&rdquo; would be the one error a technical reviewer would catch.
+  </div>
+
+  <h2>Entity Ownership</h2>
+
+  <p>Every federate is authoritative for its own aircraft and nothing else. It integrates its own equations of
+  motion and publishes the result; it never computes the other aircraft's physics. What it holds for the
+  <em>other</em> aircraft is a <strong>ghost</strong> &mdash; a local, read-only copy, corrected when an update
+  arrives and extrapolated in between.</p>
+
+  <div class="note ok">
+    <span class="lbl">Why this is the right instinct</span>
+    Localizing each side's calculations is the standard, not a simplification. DIS and HLA federations, and JSE
+    above them, are built exactly this way. Ownership pushes computation to where the state lives and puts only
+    the minimum on the wire, which is precisely why dead reckoning exists and why the federation scales past
+    two entities without changing any existing federate.
+  </div>
+
+  <h2>Aerodynamics Is a Table, Not a Solve</h2>
+
+  <p>There is no computational fluid dynamics here, and none in real flight simulators either. Aerodynamics is
+  reduced offline to <strong>coefficients</strong> &mdash; functions of angle of attack, sideslip, Mach, and
+  control deflection &mdash; and looked up at runtime. Each step: compute flow state, look up coefficients,
+  multiply out to forces and moments, add gravity, thrust, and <em>wind</em>, integrate one step. The entire
+  flight model is a table lookup and an integration.</p>
+
+  <div class="note">
+    <span class="lbl">Fidelity floor</span>
+    The minimum model is the <strong>linearized longitudinal</strong> case: four states, constant derivatives,
+    no interpolation. Its eigenvalues are the published short-period and phugoid modes, so verification is a
+    closed-form comparison. Fidelity chosen for verifiability is test-engineer reasoning, not a shortcut.
+    (ADR-0005.)
+  </div>
+
+  <h2>Scope Boundaries</h2>
+
+  <div class="grid2">
+    <div class="gcell yes">
+      <div class="gt">In scope (four weeks)</div>
+      <p>Model core: 6-DOF rigid body from linearized/tabulated aero &middot; Rankine-vortex storm + Dryden
+      turbulence &middot; two owned aircraft, one worldspace &middot; hand-authored FOM &middot; pub/sub of
+      entity state &middot; HLA time management &middot; dead reckoning with sender-side thresholding &middot;
+      formation-keeping law &middot; <strong>batch Monte&nbsp;Carlo ensemble + statistics</strong> &middot;
+      federated driver with <strong>netem</strong> impairment &middot; <strong>distribution-drift
+      comparison</strong> at a few operating points &middot; CI &middot; V&amp;V report.</p>
+    </div>
+    <div class="gcell no">
+      <div class="gt">Out of scope</div>
+      <p>CFD or any runtime flow solve &middot; weapons, sensors, EW &middot; terrain and collision &middot;
+      visuals beyond generated plots and optional replay &middot; more than two aircraft &middot; ownership
+      transfer &middot; DDM &middot; virtual (human-in-loop) or live entities &middot; MCMC storm
+      identification &middot; any custom transport or synchronization layer.</p>
+    </div>
+  </div>
+
+  <div class="note danger">
+    <span class="lbl">The one temptation to refuse</span>
+    Do not build a transport, a serialization scheme, or a synchronization protocol. The RTI already is the
+    distributed system. The competency being demonstrated is working correctly <em>inside</em> someone else's
+    standard, and a hand-rolled substitute would demonstrate the opposite. (ADR-0001, ADR-0006.)
+  </div>
+
+  <h2>Hard Constraints</h2>
+  <table>
+    <thead><tr><th style="width:190px">Constraint</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Isolation</strong></td><td>Strict separation from all other independent work &mdash; no
+      shared code, repo, licence, dependency, or design lineage; no cross-reference in commits or docs. Concept
+      transfer is expected; file transfer is not. (ADR-0009.)</td></tr>
+      <tr><td><strong>Unclassified only</strong></td><td>Aero and validation data from published or textbook
+      sources. No work-derived data, range telemetry, or instrumentation recordings.</td></tr>
+      <tr><td><strong>Off-duty, personal equipment</strong></td><td>Keeps personal ownership and provenance
+      unambiguous.</td></tr>
+      <tr><td><strong>Documentation &le; 15%</strong></td><td>Process discipline is a deliverable; process
+      overhead that consumes the build is a failure mode.</td></tr>
+      <tr><td><strong>Four weeks, hard stop</strong></td><td>Descope rather than extend. Full sweeps, replay,
+      and MCMC are horizon items. See the Roadmap tab.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Success Criteria</h2>
+  <ol>
+    <li>One model core drives both a batch ensemble and a distributed federation without physics divergence
+    between the two at zero impairment.</li>
+    <li>Each federate integrates only its own aircraft; ghosts are maintained by dead reckoning.</li>
+    <li>Model mode frequencies and damping match published values within a stated tolerance.</li>
+    <li>The batch ensemble produces an outcome distribution with confidence intervals over randomized storm and
+    turbulence draws.</li>
+    <li>The federated distribution is compared against the monolithic baseline at a few latency and
+    dead-reckoning operating points, and the drift is characterized.</li>
+    <li>CI builds every component on Linux from a clean checkout; a reader with no prior context can clone,
+    build, and reproduce every figure.</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════ 02 ARCHITECTURE ═══════════════════════ -->
+<div class="panel" id="t-arch">
+
+  <h2>The Central Idea: One Core, Many Drivers</h2>
+
+  <p>Two execution needs pull in opposite directions. Monte&nbsp;Carlo wants hundreds of fast, independent runs
+  in one process. The distributed demonstration wants coordinated multi-process execution with time management
+  and impairment. Standing up hundreds of HLA federations for the ensemble would be slow and miserable. The
+  resolution is to build the physics once, cleanly, and wrap it differently for each need. (ADR-0006.)</p>
+
+  <svg class="topo" viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+    <rect x="330" y="18" width="240" height="66" rx="10" fill="var(--surface2)"
+          stroke="var(--accent2)" stroke-width="2.5"/>
+    <text x="450" y="45" text-anchor="middle" font-family="var(--sans)" font-size="15"
+          font-weight="700" fill="var(--navy)">Model Core (C++)</text>
+    <text x="450" y="64" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">6-DOF &middot; storm &middot; turbulence &middot; advance(dt)</text>
+    <text x="450" y="77" text-anchor="middle" font-family="var(--sans)" font-size="10.5"
+          fill="var(--text3)">no RTI &middot; no clock &middot; no timing assumptions</text>
+
+    <rect x="70" y="170" width="220" height="86" rx="9" fill="var(--surface)"
+          stroke="var(--border)" stroke-width="2"/>
+    <text x="180" y="196" text-anchor="middle" font-family="var(--sans)" font-size="13.5"
+          font-weight="700" fill="var(--navy)">Batch Driver</text>
+    <text x="180" y="215" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">single process, N seeds</text>
+    <text x="180" y="231" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">Monte Carlo ensemble</text>
+    <text x="180" y="247" text-anchor="middle" font-family="var(--mono)" font-size="10"
+          fill="var(--text3)">constructive &middot; no RTI</text>
+
+    <rect x="340" y="170" width="220" height="86" rx="9" fill="var(--surface)"
+          stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="450" y="196" text-anchor="middle" font-family="var(--sans)" font-size="13.5"
+          font-weight="700" fill="var(--navy)">Federation Driver</text>
+    <text x="450" y="215" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">federates + RTI, one scenario</text>
+    <text x="450" y="231" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">time mgmt &middot; ghosts &middot; netem</text>
+    <text x="450" y="247" text-anchor="middle" font-family="var(--mono)" font-size="10"
+          fill="var(--text3)">constructive &middot; distributed</text>
+
+    <rect x="610" y="170" width="220" height="86" rx="9" fill="var(--surface)"
+          stroke="var(--border)" stroke-width="2" stroke-dasharray="5 4"/>
+    <text x="720" y="196" text-anchor="middle" font-family="var(--sans)" font-size="13.5"
+          font-weight="700" fill="var(--navy)">Replay Driver</text>
+    <text x="720" y="215" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">wall-clock playback of logs</text>
+    <text x="720" y="231" text-anchor="middle" font-family="var(--sans)" font-size="11"
+          fill="var(--text2)">on-ramp to a virtual mode</text>
+    <text x="720" y="247" text-anchor="middle" font-family="var(--mono)" font-size="10"
+          fill="var(--text3)">horizon</text>
+
+    <path d="M410 84 L200 168" stroke="var(--edge-branch)" stroke-width="2" fill="none" stroke-dasharray="2 5"/>
+    <path d="M450 84 L450 168" stroke="var(--edge)" stroke-width="2.5" fill="none"/>
+    <path d="M490 84 L700 168" stroke="var(--edge-branch)" stroke-width="2" fill="none" stroke-dasharray="2 5"/>
+  </svg>
+
+  <p>Same physics, three wrappers. The batch and federation drivers are the four-week deliverables; replay is a
+  horizon item that reuses the federation driver's pacing. The rule that makes it work: <strong>the core has no
+  clock and no RTI dependency</strong>. Pacing and transport belong to the drivers, never the physics. Any
+  timing assumption that leaks into the core is a defect to correct, not accommodate.</p>
+
+  <h2>Federation Topology</h2>
+
+  <svg class="topo" viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="var(--edge)"/>
+      </marker>
+      <marker id="arb" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="var(--edge-branch)"/>
+      </marker>
+    </defs>
+    <rect x="250" y="140" width="400" height="62" rx="10" fill="var(--surface2)"
+          stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="450" y="168" text-anchor="middle" font-family="var(--sans)" font-size="17"
+          font-weight="700" fill="var(--navy)">RTI &mdash; IEEE 1516e</text>
+    <text x="450" y="188" text-anchor="middle" font-family="var(--sans)" font-size="12"
+          fill="var(--text2)">pub/sub &middot; time management &middot; lifecycle &middot; links shaped by netem</text>
+
+    <rect x="40" y="26" width="230" height="76" rx="9" fill="var(--surface)"
+          stroke="var(--border)" stroke-width="2"/>
+    <text x="155" y="52" text-anchor="middle" font-family="var(--sans)" font-size="14"
+          font-weight="700" fill="var(--navy)">Ship-1 Federate</text>
+    <text x="155" y="71" text-anchor="middle" font-family="var(--sans)" font-size="11.5"
+          fill="var(--text2)">owns AC-1 &middot; flies scripted profile</text>
+    <text x="155" y="88" text-anchor="middle" font-family="var(--sans)" font-size="11.5"
+          fill="var(--text2)">feels the storm &middot; publishes state</text>
+
+    <rect x="630" y="26" width="230" height="76" rx="9" fill="var(--surface)"
+          stroke="var(--border)" stroke-width="2"/>
+    <text x="745" y="52" text-anchor="middle" font-family="var(--sans)" font-size="14"
+          font-weight="700" fill="var(--navy)">Ship-2 Federate</text>
+    <text x="745" y="71" text-anchor="middle" font-family="var(--sans)" font-size="11.5"
+          fill="var(--text2)">owns AC-2 &middot; formation on ghost</text>
+    <text x="745" y="88" text-anchor="middle" font-family="var(--sans)" font-size="11.5"
+          fill="var(--text2)">feels the storm &middot; publishes state</text>
+
+    <rect x="335" y="256" width="230" height="60" rx="9" fill="var(--surface)"
+          stroke="var(--border)" stroke-width="2" stroke-dasharray="5 4"/>
+    <text x="450" y="281" text-anchor="middle" font-family="var(--sans)" font-size="14"
+          font-weight="700" fill="var(--navy)">Logger Federate</text>
+    <text x="450" y="300" text-anchor="middle" font-family="var(--sans)" font-size="11.5"
+          fill="var(--text2)">constrained only &middot; truth + ghost to CSV</text>
+
+    <path d="M170 106 L300 136" stroke="var(--edge)" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M255 140 L140 106" stroke="var(--edge)" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M730 106 L600 136" stroke="var(--edge)" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M645 140 L760 106" stroke="var(--edge)" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M450 204 L450 250" stroke="var(--edge-branch)" stroke-width="2.5"
+          stroke-dasharray="3 5" fill="none" marker-end="url(#arb)"/>
+
+    <text x="155" y="126" text-anchor="middle" font-family="var(--mono)" font-size="10.5"
+          fill="var(--text3)">pub AC-1 / sub AC-2</text>
+    <text x="745" y="126" text-anchor="middle" font-family="var(--mono)" font-size="10.5"
+          fill="var(--text3)">pub AC-2 / sub AC-1</text>
+    <text x="470" y="232" font-family="var(--mono)" font-size="10.5" fill="var(--text3)">sub all</text>
+  </svg>
+
+  <p>Three processes, no direct links; every exchange goes through the RTI. In the federated experiment the
+  federates run in separate containers and <code>tc netem</code> shapes the links to inject latency, jitter,
+  and loss at the network layer &mdash; real impairment, not a delay variable inside the code. (ADR-0008.)</p>
+
+  <h2>Federate Roles</h2>
+  <table>
+    <thead><tr><th style="width:140px">Federate</th><th>Owns</th><th>Publishes</th><th>Subscribes</th><th style="width:130px">Time policy</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Ship-1</strong></td><td>Aircraft 1</td><td>AC-1 state</td><td>AC-2 state</td>
+      <td>regulating + constrained</td></tr>
+      <tr><td><strong>Ship-2</strong></td><td>Aircraft 2</td><td>AC-2 state</td><td>AC-1 state</td>
+      <td>regulating + constrained</td></tr>
+      <tr><td><strong>Logger</strong></td><td>nothing</td><td>nothing</td><td>both</td>
+      <td>constrained only</td></tr>
+    </tbody>
+  </table>
+  <p>The logger records both the received ghost and, on a debug channel the control loop cannot see, the
+  owner's truth &mdash; so the analysis can measure ghost error directly. It is constrained but not regulating,
+  the standard pattern for a recorder that must never block the federation.</p>
+
+  <h2>The Storm</h2>
+  <p>A <strong>Rankine vortex</strong>: tangential wind rising linearly inside a core radius, falling as 1/r
+  outside, plus an updraft term &mdash; a closed-form, two-parameter field that both aircraft feel coherently
+  because they share the worldspace. <strong>Dryden turbulence</strong> (band-limited noise through the
+  standard shaping filters) adds the per-run stochastic component that makes each ensemble member distinct.
+  Wind couples into the flight model at one point: it is subtracted from inertial velocity before angle of
+  attack, sideslip, and dynamic pressure are computed. (ADR-0010.)</p>
+
+  <div class="note">
+    <span class="lbl">Double duty</span>
+    The vortex parameters &mdash; center, core radius, circulation &mdash; are exactly the unknowns the optional
+    horizon-stage MCMC inversion would infer from a noisy observed trajectory. The same storm model serves both
+    the forward ensemble and the inverse problem.
+  </div>
+
+  <h2>Object Model</h2>
+  <table>
+    <thead><tr><th style="width:200px">Attribute</th><th style="width:160px">Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>Callsign</code></td><td>string</td><td>Static after registration</td></tr>
+      <tr><td><code>Position</code></td><td>3 &times; double</td><td>Worldspace metres; frame fixed in an ADR</td></tr>
+      <tr><td><code>Orientation</code></td><td>quaternion</td><td>Avoids gimbal lock; interpolates cleanly</td></tr>
+      <tr><td><code>Velocity</code></td><td>3 &times; double</td><td>Worldspace; needed for dead reckoning</td></tr>
+      <tr><td><code>AngularVelocity</code></td><td>3 &times; double</td><td>Body rates p, q, r</td></tr>
+      <tr><td><code>Acceleration</code></td><td>3 &times; double</td><td>Enables second-order dead reckoning</td></tr>
+    </tbody>
+  </table>
+  <p>One object class, one interaction class (<code>RunControl</code>: scenario start/stop and the current
+  impairment setting). Objects carry persistent state; interactions carry events. Author the FOM by hand
+  &mdash; it is the artifact that most directly shows the object model is understood.</p>
+
+  <h2>Time Management</h2>
+  <p>Each federate has two independent switches. <strong>Regulating</strong>: my timestamped messages make
+  others wait for me. <strong>Constrained</strong>: I wait for others. Both ships are both; the logger is
+  constrained only. A federate calls <code>timeAdvanceRequest(t)</code>, the RTI delivers all messages at or
+  before <code>t</code> in order and then grants the advance, and only then does the federate step.
+  <strong>Lookahead</strong> is the promise not to send anything earlier than now&nbsp;+&nbsp;L; larger means
+  more parallelism, and zero &mdash; with everyone regulating and constrained &mdash; deadlocks.</p>
+  <div class="note">
+    <span class="lbl">Interview-relevant, and a deliverable</span>
+    Inducing the zero-lookahead deadlock deliberately and writing up the resolution is a milestone item. Being
+    able to explain <em>why</em> it deadlocks, without notes, is the highest-value single thing on this tab.
+    Note also that this conservative scheme is exactly what a human-in-the-loop (virtual) federate could not
+    obey &mdash; see LVC on the Reference tab.
+  </div>
+
+  <h2>Dead Reckoning</h2>
+  <p>Both sides run the same cheap extrapolation of the ghost between updates. Crucially, the <strong>sender
+  runs that identical model against its own truth</strong> and publishes a fresh update only when the
+  divergence exceeds a threshold. That sender-side mirror is what turns fixed-rate publishing into
+  send-on-need, and it is the part people miss. Two algorithms are implemented &mdash; constant velocity and
+  constant acceleration &mdash; and compared.</p>
+</div>
+
+<!-- ═══════════════════════ 03 ROADMAP ═══════════════════════ -->
+<div class="panel" id="t-roadmap">
+  <h2>Roadmap</h2>
+  <p class="lead" id="rgoal"></p>
+  <p style="font-size:12.5px;color:var(--text3);font-style:italic" id="rprinciple"></p>
+  <p class="legend">
+    <span><i class="sw" style="background:var(--node-main)"></i>milestone</span>
+    <span><i class="sw" style="background:var(--node-child)"></i>topic</span>
+    <span><i class="sw" style="background:var(--done-tint)"></i>&#10003; done</span>
+    <span><i class="sw" style="background:var(--surface);border-style:dashed"></i>horizon</span>
+    <span style="color:var(--text3)">click any node for exit criteria</span>
+  </p>
+
+  <div class="scroll"><div id="canvas"><svg id="edges"></svg></div></div>
+
+  <h2>Critical Path</h2>
+  <p><strong>M0 Bootstrap &rarr; M1 Handshake &rarr; M4 Worldspace &rarr; M5 Margin &rarr; M6 Evidence.</strong>
+  The physics path &mdash; M2 Core then M3 Ensemble &mdash; runs in parallel: the model core and the batch
+  ensemble need no RTI, so they are built alongside RTI bring-up. M4 needs both the core (M2) and a working
+  federation (M1). The batch baseline distribution from M3 feeds the comparison in M5.</p>
+
+  <h2>Descope Order</h2>
+  <p>If week three ends behind, cut in this order and record each cut in the journal:</p>
+  <ol>
+    <li>The second dead-reckoning algorithm &mdash; keep constant velocity only.</li>
+    <li>Lateral-directional dynamics &mdash; drop to longitudinal, fly a trail formation.</li>
+    <li>Extra operating points in the drift comparison &mdash; keep two or three latency values.</li>
+    <li>The lookahead-versus-advance-rate sweep.</li>
+  </ol>
+
+  <div class="note warn">
+    <span class="lbl">Descope floor</span>
+    Never cut: the model core, time management, the batch ensemble with a distribution, the federated run at a
+    couple of operating points, and the V&amp;V report. Those five are the project. Everything else is an
+    upgrade. A federation that ships time management, an ensemble, and a distribution comparison with three
+    figures beats one that ships ten figures without them.
+  </div>
+
+  <div class="note">
+    <span class="lbl">On the horizon (not the four weeks)</span>
+    Replay driver &middot; full latency and dead-reckoning sweeps &middot; MCMC storm identification &middot;
+    lateral-directional / tabulated 6-DOF &middot; a virtual (human-in-loop) driver &middot; a DIS/TENA
+    gateway for live entities &middot; scaling past two aircraft. Listed so scope pressure has somewhere to go
+    other than into the build.
+  </div>
+</div>
+
+<!-- ═══════════════════════ 04 EXPERIMENTS ═══════════════════════ -->
+<div class="panel" id="t-exp">
+
+  <h2>The Headline Result</h2>
+  <p class="lead">Does distributing the simulation change the answer? Build a baseline outcome distribution from
+  the monolithic ensemble, then run a subset federated under real network impairment, and compare the
+  <em>distributions</em> &mdash; not individual trajectories, which never match, but their statistics. Report
+  how far the federated distribution drifts from the monolithic one as latency and dead-reckoning error rise.</p>
+
+  <p>This is the question a distributed-simulation program actually worries about: whether a federated
+  execution is still valid for the analysis it is being used for. Answering it with a measured distribution
+  drift is a validation result, not a demo.</p>
+
+  <h2>The Ensemble (Monte Carlo)</h2>
+  <p>The batch driver runs many scenarios over the same nominal setup, drawing per-run randomness: turbulence
+  seed, initial-condition scatter, and storm-parameter jitter. Each run yields an outcome metric &mdash; peak
+  or RMS station-keeping error, say. The collection is a distribution, reported with confidence intervals
+  rather than a single number. Hundreds to thousands of runs complete in minutes in one C++ process across
+  cores.</p>
+
+  <div class="note ok">
+    <span class="lbl">This is the not-a-videogame part</span>
+    A game produces one plausible trajectory. This produces a distribution with intervals and a coverage
+    story. Let the artifact make the point; do not make the comparison out loud.
+  </div>
+
+  <h2>The Coupling That Makes the Network Measurable</h2>
+  <p>The follower's formation law consumes the <em>dead-reckoned ghost</em> of the lead, never its truth. So
+  network delay and extrapolation error enter a closed physical loop and emerge as station-keeping error. As a
+  secondary, analytical check, the critical delay at which the loop loses stability can be predicted from the
+  tracking law's phase margin and crossover frequency &mdash; committed before the sweep &mdash; and compared
+  to the measured value.</p>
+
+  <h2>Operating-Point Sweeps</h2>
+  <table>
+    <thead><tr><th style="width:200px">Sweep</th><th>Independent</th><th>Dependent</th><th>Shows</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Distribution drift</strong></td><td>injected latency, DR threshold</td>
+      <td>distance between federated and monolithic outcome distributions</td>
+      <td>Whether distribution preserves the analysis &mdash; the headline</td></tr>
+      <tr><td><strong>Latency stability</strong></td><td>injected delay</td><td>effective damping ratio</td>
+      <td>Coupled network-and-physics reasoning; analytical cross-check</td></tr>
+      <tr><td><strong>DR bandwidth</strong></td><td>error threshold</td><td>bytes / messages per second</td>
+      <td>Cost side of the tradeoff</td></tr>
+      <tr><td><strong>DR fidelity</strong></td><td>error threshold</td><td>peak ghost position error</td>
+      <td>Accuracy side of the same tradeoff</td></tr>
+      <tr><td><strong>Lookahead cost</strong></td><td>lookahead value</td><td>wall clock per sim second</td>
+      <td>Time management understood, not copied</td></tr>
+      <tr><td><strong>Mode verification</strong></td><td>&mdash;</td><td>eigenvalues vs published</td>
+      <td>Verification against an analytical truth source</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Verification and Validation</h2>
+  <table>
+    <thead><tr><th style="width:230px">Claim</th><th>Truth source</th><th>Tolerance</th></tr></thead>
+    <tbody>
+      <tr><td>Integration correct</td><td>Closed-form response of the linear system</td><td>State error below a
+      stated bound</td></tr>
+      <tr><td>Flight model correct</td><td>Published short-period and phugoid characteristics</td>
+      <td>Percentage bands, stated before measuring</td></tr>
+      <tr><td>Core is driver-agnostic</td><td>Batch run vs federated run at zero impairment</td>
+      <td>Distribution divergence below a bound</td></tr>
+      <tr><td>Dead reckoning correct</td><td>Ghost vs owner truth, offline</td><td>Peak error at or below the
+      threshold</td></tr>
+      <tr><td>Distribution drift real</td><td>Monolithic ensemble baseline</td><td>Reported with confidence
+      intervals; characterized, not tuned away</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note danger">
+    <span class="lbl">Non-negotiable</span>
+    Every number in the report comes from committed data produced by a committed script. Nothing typed from
+    memory, nothing generated. An unverified number in a verification document is disqualifying in a way it is
+    nowhere else.
+  </div>
+
+  <h2>Optional Horizon Extension: MCMC Storm Identification</h2>
+  <p>After the four weeks, and only then: given one noisy observed trajectory, infer the storm's parameters
+  &mdash; vortex center, core radius, circulation &mdash; by sampling the posterior with Metropolis-Hastings,
+  each proposal costing one forward integration of the model core. Because the true parameters are known
+  (they were set), posterior <em>coverage</em> can be checked. Then ask how much the posterior widens when the
+  observation is a dead-reckoned ghost rather than truth &mdash; turning network degradation into a
+  quantified loss of inferential precision. This is the genuine, correctly-named MCMC; three to five days,
+  gated behind everything above.</p>
+</div>
+
+<!-- ═══════════════════════ 05 PROCESS ═══════════════════════ -->
+<div class="panel" id="t-process">
+
+  <h2>Why Process Is a Deliverable</h2>
+  <p>Legibility is the point: work decomposed into tracked units, status visible without asking, decisions
+  leaving a trail. In a test organization this matters because software must survive audit, turnover, and
+  oversight. The process should be visible in the repository without narration.</p>
+
+  <h2>Four Layers of Documentation</h2>
+  <table>
+    <thead><tr><th style="width:150px">Layer</th><th>Answers</th><th>When written</th></tr></thead>
+    <tbody>
+      <tr><td><strong>ADRs</strong></td><td><em>Why</em> &mdash; decisions and trade-offs</td><td>At the moment
+      of the decision, while alternatives are live. Immutable once accepted.</td></tr>
+      <tr><td><strong>Journal</strong></td><td><em>What happened</em> &mdash; per-session log</td><td>Five
+      minutes at the end of each session, including failures.</td></tr>
+      <tr><td><strong>Issues / commits</strong></td><td><em>What work exists</em></td><td>Continuously: issue
+      before code, branch and PR per issue.</td></tr>
+      <tr><td><strong>V&amp;V report</strong></td><td><em>Does it work</em></td><td>Week four, assembled from
+      the other three rather than reconstructed.</td></tr>
+    </tbody>
+  </table>
+  <p>The rule that ties them together: <strong>write at the moment, not at the end</strong>. A flight-test
+  audience can smell reconstructed documentation.</p>
+
+  <h2>Board</h2>
+  <p>GitHub Projects, six columns: <strong>Backlog &middot; Ready &middot; In Progress &middot; Blocked
+  &middot; Review &middot; Done</strong>. WIP limit of two, enforced, violations recorded in the journal with
+  their reason. The Blocked column earns its keep by making impediments visible &mdash; the actual point of
+  Kanban and the source of most retrospective material.</p>
+
+  <h2>Working Rules</h2>
+  <table>
+    <thead><tr><th style="width:200px">Rule</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Issue before code</strong></td><td>Every unit of work is an issue with written
+      acceptance criteria first.</td></tr>
+      <tr><td><strong>Branch per issue</strong></td><td><code>feature/12-time-advance-request</code>.</td></tr>
+      <tr><td><strong>PR per branch</strong></td><td>Self-merged after CI passes; a reviewable diff and a gate
+      per unit of work, even solo.</td></tr>
+      <tr><td><strong>Conventional commits</strong></td><td><code>feat(core): add Rankine vortex field</code>,
+      closing its issue by number.</td></tr>
+      <tr><td><strong>ADR per decision</strong></td><td>Context, decision, alternatives, consequences. One page.</td></tr>
+      <tr><td><strong>Journal per session</strong></td><td>What happened, what broke, what is next.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>AI Tooling Boundary</h2>
+  <div class="grid2">
+    <div class="gcell yes">
+      <div class="gt">Appropriate</div>
+      <p>Backlog decomposition drafts &middot; FOM, CMake, and CI boilerplate &middot; RTI callback stubs
+      &middot; container / netem setup scaffolding &middot; weekly rollups drafted from journal entries
+      &middot; ADR formatting from stated reasoning &middot; plot scripts.</p>
+    </div>
+    <div class="gcell no">
+      <div class="gt">Not appropriate</div>
+      <p>The dynamics, storm, time-management, dead-reckoning, ensemble-statistics, and control-law code
+      &middot; any number in the V&amp;V report &middot; the retrospective &middot; the interpretation of the
+      distribution drift. These are what will be asked about.</p>
+    </div>
+  </div>
+
+  <h2>The Decision Record Set</h2>
+  <p>Thirteen ADRs are stubbed at project start (<code>docs/adr/</code>): the practice itself (0000), the
+  isolation constraint (0009), and eleven project decisions from RTI selection through constructive scope.
+  Two are <em>Accepted</em> from day one; the rest are <em>Proposed</em> with a resolve-by milestone and lock
+  as the project reaches them.</p>
+
+  <div class="note ok">
+    <span class="lbl">Set it up on day one</span>
+    Repo, board, columns, ADR directory, journal file, CI skeleton, and the container scaffolding &mdash; all
+    in one sitting before any C++ is written. Process retrofitted in week three does not get retrofitted.
+  </div>
+</div>
+
+<!-- ═══════════════════════ 06 REFERENCE ═══════════════════════ -->
+<div class="panel" id="t-ref">
+
+  <h2>Monte Carlo vs MCMC</h2>
+  <div class="grid2">
+    <div class="gcell yes">
+      <div class="gt">Monte Carlo &mdash; in scope</div>
+      <p>Known inputs, random perturbations drawn per run, outputs collected into a distribution. Forward
+      uncertainty propagation. This is the ensemble. No chain, nothing inferred.</p>
+    </div>
+    <div class="gcell mid">
+      <div class="gt">MCMC &mdash; horizon only</div>
+      <p>Sampling a posterior over <em>unknown</em> parameters given observed data. An inverse problem. Appears
+      only in the optional storm-identification extension. Calling the ensemble &ldquo;MCMC&rdquo; is the one
+      naming error a reviewer would catch.</p>
+    </div>
+  </div>
+
+  <h2>LVC: What This Engine Can and Cannot Do</h2>
+  <div class="grid3">
+    <div class="gcell yes">
+      <div class="gt">Constructive &mdash; built</div>
+      <p>Simulated entities, no human in the loop during execution. Both drivers (batch and federated) are
+      constructive. Deterministic given a seed, which is what makes the ensemble possible.</p>
+    </div>
+    <div class="gcell mid">
+      <div class="gt">Virtual &mdash; accommodated</div>
+      <p>Real human, simulated aircraft. Not built in the month. Reachable via the driver split, but requires
+      heterogeneous time management (a free-running, best-effort federate) and gives up ensemble
+      reproducibility. (ADR-0011.)</p>
+    </div>
+    <div class="gcell no">
+      <div class="gt">Live &mdash; not supported</div>
+      <p>Real people, real systems. Would enter only through a DIS/TENA gateway federate bridging range
+      instrumentation. Horizon item; the one that maps most directly onto range operations.</p>
+    </div>
+  </div>
+  <p>Batch versus federated is an <em>execution-mode</em> distinction, not an LVC one &mdash; both are
+  constructive. The reason virtual is not a config flag is time management: a human cannot be held at a time
+  advance request, so a virtual federate runs best-effort and wall-clock-paced, which breaks the conservative
+  scheme and the determinism the ensemble depends on. The replay driver is structurally a virtual federate
+  minus the input device, which is why building replay also builds the pacing path a virtual mode would need.</p>
+
+  <h2>Glossary</h2>
+  <dl class="defs">
+    <dt>HLA</dt><dd>High Level Architecture, IEEE 1516. Federates exchange FOM-described data through an RTI.</dd>
+    <dt>Federate / Federation</dt><dd>One simulator process / the set of them running together.</dd>
+    <dt>RTI</dt><dd>Run-Time Infrastructure. Middleware for pub/sub routing, time management, object lifecycle.</dd>
+    <dt>FOM / SOM</dt><dd>Federation Object Model / the subset one federate publishes or subscribes to.</dd>
+    <dt>Ownership</dt><dd>Exactly one federate is authoritative for each attribute of each object instance.</dd>
+    <dt>Ghost</dt><dd>A local read-only copy of a remotely owned entity, corrected on update, extrapolated between.</dd>
+    <dt>Dead reckoning</dt><dd>Extrapolating a ghost between updates; the owner publishes only when its own copy
+    of that extrapolation exceeds an error threshold.</dd>
+    <dt>Regulating / Constrained</dt><dd>This federate's timestamps constrain others / this federate waits for others.</dd>
+    <dt>Lookahead / LBTS</dt><dd>The minimum future offset a regulating federate promises / the lower bound on
+    timestamps the RTI computes to decide a safe advance.</dd>
+    <dt>Rankine vortex</dt><dd>A two-parameter wind field: linear inside a core radius, 1/r outside.</dd>
+    <dt>Dryden turbulence</dt><dd>Band-limited noise through standard shaping filters; the stochastic forcing.</dd>
+    <dt>netem</dt><dd>Linux <code>tc</code> queueing discipline that adds latency, jitter, and loss to an
+    interface &mdash; real network impairment.</dd>
+    <dt>DIS / PDU</dt><dd>IEEE 1278, the older broadcast standard / one of its messages.</dd>
+    <dt>TENA</dt><dd>Test and Training Enabling Architecture; range instrumentation, live-asset oriented.</dd>
+    <dt>LVC</dt><dd>Live, Virtual, Constructive &mdash; a taxonomy by who and what is real.</dd>
+    <dt>JSE</dt><dd>Joint Simulation Environment; the programme-level context.</dd>
+  </dl>
+
+  <h2>RTI Options</h2>
+  <table>
+    <thead><tr><th style="width:130px">RTI</th><th>Interfaces</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Portico</strong></td><td>HLA 1.3 and 1516e, Java and C++</td>
+      <td>Actively maintained; current line builds against Visual Studio 2022 and GCC 11.2 on modern Ubuntu.
+      Java-based &mdash; the C++ interface wraps the core Java library, so a JVM loads behind each C++ federate.
+      Smoothest install; recommended for week one. (ADR-0001.)</td></tr>
+      <tr><td><strong>CERTI</strong></td><td>HLA 1.3 C++/Java; partial 1516-2000 and 1516-2010 C++</td>
+      <td>ONERA-maintained, native C++, no JVM. Check partial 1516e coverage against the services used.</td></tr>
+      <tr><td><strong>OpenRTI</strong></td><td>1516 and 1516e C++</td>
+      <td>Native C++, CMake-based. The alternative if the JVM dependency is unwanted; documented migration
+      target.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Deployment for the Experiment</h2>
+  <table>
+    <thead><tr><th style="width:150px">Stage</th><th>Where</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Development</strong></td><td>Localhost, separate processes</td><td>Ninety percent of the
+      work; fastest iteration, no infrastructure.</td></tr>
+      <tr><td><strong>Experiment</strong></td><td>Containers + <code>tc netem</code></td><td>Real link
+      impairment, CPU pinning, fast sweeps. The primary harness.</td></tr>
+      <tr><td><strong>Transparency proof</strong></td><td>Two or three full VMs, once</td><td>One late run and
+      screenshot showing the federation crosses real OS network boundaries.</td></tr>
+    </tbody>
+  </table>
+  <p>The batch ensemble driver is <em>not</em> containerized or virtualized &mdash; it is one multi-threaded
+  process. Only the federated driver touches containers and VMs.</p>
+
+  <h2>Standards and Background</h2>
+  <ul>
+    <li><strong>IEEE 1516</strong> &mdash; HLA framework, interface spec, object model template.</li>
+    <li><strong>IEEE 1278</strong> &mdash; DIS, including the dead-reckoning algorithm set.</li>
+    <li><strong>Military turbulence handbooks</strong> &mdash; the Dryden model specification.</li>
+    <li><strong>DoD VV&amp;A doctrine</strong> &mdash; the structure the V&amp;V report follows.</li>
+    <li><strong>Flight dynamics texts</strong> &mdash; stability derivatives, linearized models, published mode
+    characteristics.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="lbl">Isolation reminder</span>
+    Concept transfer between this project and other independent work is expected and valuable. Code,
+    repository, licence, and documentation lineage remain strictly separate in both directions. (ADR-0009.)
+  </div>
+</div>
+
+  <p class="footer">Charter v0.3.0 &middot; supersedes v0.2.0 &middot; self-contained &middot; ids
+  (<code>M0</code>, <code>T1</code>, <code>H0</code>) are stable citation keys.
+  Edit <code>ROADMAP_DATA</code> in the source, not the rendered nodes.</p>
+</div>
+
+<div id="drawer">
+  <button class="close" title="close">&times;</button>
+  <div id="drawer-body"></div>
+</div>
+
+<script>
+const ROADMAP_DATA = {
+  goal: "Ship a storm-forced two-aircraft IEEE 1516e federation in C++ whose validated model core also drives a Monte Carlo ensemble \u2014 and measure whether distributing the simulation changes the distribution of outcomes. Four weeks.",
+  principle: "One validated model core, wrapped by many drivers. Consume the middleware; own your own physics; report distributions, not single runs.",
+  milestones: [
+    {
+      id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "next",
+      blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added.",
+      children: [
+        { label: "Repo, licence, .gitignore" },
+        { label: "Board: 6 columns, WIP limit 2" },
+        { label: "docs/adr/ seeded with the 13-ADR set" },
+        { label: "docs/journal.md" },
+        { label: "CMake skeleton + CI on empty target" },
+        { label: "RTI installed, shipped examples run" },
+        { label: "Container + netem scaffolding sketched" },
+        { label: "Whole month decomposed into sized issues" }
+      ],
+      stamps: [
+        "Board populated with the full month of issues",
+        "CI green on an empty build",
+        "Vendor example federates run locally",
+        "ADR-0001 (RTI) and ADR-0002 (public repo) accepted"
+      ]
+    },
+    {
+      id: "M1", codename: "Handshake", title: "RTI Bring-up \u2014 Week 1", status: "planned",
+      blurb: "Learn the interface against a model too trivial to be the cause of a bug. Everything here is about the RTI; nothing is about physics.",
+      children: [
+        { label: "Author the FOM by hand" },
+        { label: "Publisher + subscriber federates" },
+        { label: "Ambassador callbacks, reflections handled" },
+        { label: "Lifecycle: create / join / register / update / resign / destroy" },
+        { label: "Best-effort, receive-order \u2014 no time mgmt yet" },
+        { label: "Repeat across two hosts on the LAN" }
+      ],
+      stamps: [
+        "Two processes exchange updates through the RTI and shut down cleanly",
+        "Same run succeeds across two machines",
+        "FOM is hand-authored, not adapted from a sample"
+      ]
+    },
+    {
+      id: "M2", codename: "Core", title: "Model Core + Storm \u2014 Weeks 1\u20132", status: "planned",
+      blurb: "Off the critical path: no RTI, no clock. The heart of the project \u2014 physics that both drivers share. Verified standalone before anything is wrapped.",
+      children: [
+        { label: "Rigid-body state + RK4, advance(dt) interface" },
+        { label: "Linearized longitudinal model, published derivatives" },
+        { label: "Quaternion orientation" },
+        { label: "Rankine-vortex storm field" },
+        { label: "Dryden turbulence, seeded" },
+        { label: "Wind coupling: subtract from inertial velocity" },
+        { label: "Eigenvalues vs published short-period and phugoid" }
+      ],
+      stamps: [
+        "Mode frequency and damping match published values within tolerance",
+        "Core has no RTI dependency and no clock",
+        "ADR-0005 (fidelity) and ADR-0010 (storm) accepted"
+      ]
+    },
+    {
+      id: "M3", codename: "Ensemble", title: "Batch Monte Carlo \u2014 Week 2", status: "planned",
+      blurb: "The constructive batch driver. Many randomized runs in one process; outcomes collected into a distribution with intervals. Needs the core, not the RTI \u2014 parallel to M1.",
+      children: [
+        { label: "Batch driver over the model core" },
+        { label: "Per-run draws: turbulence seed, IC scatter, storm jitter" },
+        { label: "Threaded across cores" },
+        { label: "Outcome metric per run (RMS / peak station error)" },
+        { label: "Distribution + confidence intervals in C++" },
+        { label: "CSV out for figures" }
+      ],
+      stamps: [
+        "Hundreds of runs complete in minutes",
+        "Baseline outcome distribution produced with intervals",
+        "This is the monolithic baseline M5 compares against"
+      ]
+    },
+    {
+      id: "M4", codename: "Worldspace", title: "Federated Driver \u2014 Weeks 2\u20133", status: "planned",
+      blurb: "The distributed mode over the same core. Two owned aircraft, ghosts, dead reckoning, time management. Needs M1 and M2. The milestone most likely to overrun \u2014 protect it; take slack from M2/M3.",
+      children: [
+        { label: "Wrap the core as two aircraft federates" },
+        { label: "Ghosts + discovery of remote entities" },
+        { label: "Dead reckoning: receiver extrapolation" },
+        { label: "Dead reckoning: sender mirror + threshold" },
+        { label: "Time regulating + constrained on both ships" },
+        { label: "Logger constrained only; truth + ghost to CSV" },
+        { label: "Induce, document, resolve a lookahead deadlock" }
+      ],
+      stamps: [
+        "Both aircraft integrate locally; neither computes the other's physics",
+        "Federated run matches a batch run at zero impairment (core is driver-agnostic)",
+        "The deadlock and its resolution are written up"
+      ]
+    },
+    {
+      id: "M5", codename: "Margin", title: "Coupling, Impairment & Drift \u2014 Weeks 3\u20134", status: "planned",
+      blurb: "The experiment the project is named for. Formation coupling makes the network measurable; netem injects real impairment; the federated distribution is compared to the monolithic baseline.",
+      children: [
+        { label: "Formation-keeping law on the ghost of AC-1" },
+        { label: "Container deployment + tc netem impairment" },
+        { label: "Predict critical delay from phase margin (commit first)" },
+        { label: "Federated ensemble subset at 2\u20133 operating points" },
+        { label: "Distribution drift: federated vs monolithic" },
+        { label: "Latency-stability and DR-tradeoff figures" }
+      ],
+      stamps: [
+        "Prediction committed before the first sweep runs",
+        "Distribution drift characterized with confidence intervals",
+        "Figures regenerated reproducibly from committed CSV"
+      ]
+    },
+    {
+      id: "M6", codename: "Evidence", title: "V&V and Packaging \u2014 Week 4", status: "planned",
+      blurb: "Converts a working project into a reviewable one. A stranger with a terminal is the acceptance test.",
+      children: [
+        { label: "V&V report: requirements, method, truth sources, results" },
+        { label: "Interpret the distribution drift and its limits" },
+        { label: "Complete the ADR set" },
+        { label: "Retrospective, written by hand" },
+        { label: "Board metrics and weekly screenshots" },
+        { label: "README: build and reproduce every figure" }
+      ],
+      stamps: [
+        "A reader with no prior context can clone, build, and reproduce every figure",
+        "Every significant decision has an ADR behind it",
+        "Limitations stated plainly rather than omitted"
+      ]
+    }
+  ],
+  tracks: [
+    {
+      id: "T1", codename: "Records", title: "Process & Records", status: "planned",
+      blurb: "Runs continuously from M0. Capped at fifteen percent of total effort. The four documentation layers live here.",
+      children: [
+        { label: "Issue before code, always" },
+        { label: "Branch + PR per issue" },
+        { label: "Conventional commits closing issues" },
+        { label: "Journal entry each session" },
+        { label: "ADRs written at decision time" },
+        { label: "Weekly rollup from journal" }
+      ],
+      stamps: ["WIP violations recorded with reasons", "Blocked column actually used"]
+    },
+    {
+      id: "T2", codename: "Harness", title: "Instrumentation", status: "planned",
+      blurb: "Built early and cheaply so M5 is a matter of running sweeps rather than writing tooling under time pressure.",
+      children: [
+        { label: "CSV emission (truth + ghost) from the logger" },
+        { label: "Plot + stats scripts \u2014 every figure regenerable" },
+        { label: "Byte and message counters" },
+        { label: "Run config by file, not recompile" },
+        { label: "netem parameter table per sweep point" }
+      ],
+      stamps: ["No figure is ever produced by hand"]
+    },
+    {
+      id: "T3", codename: "Vocabulary", title: "Standards Reading", status: "planned",
+      blurb: "Gates nothing, but turns the build into interview answers. Notes go in the journal as technical entries.",
+      children: [
+        { label: "IEEE 1516 service groups" },
+        { label: "Time management: LBTS, lookahead" },
+        { label: "IEEE 1278 DIS: PDUs and DR algorithms" },
+        { label: "LVC taxonomy and time-policy implications" },
+        { label: "TENA overview; DDM as interest filtering" }
+      ],
+      stamps: ["Can explain lookahead's parallelism cost, and why virtual can't obey it, without notes"]
+    }
+  ],
+  horizon: {
+    id: "H0", codename: "Beyond the Month", status: "horizon",
+    blurb: "Only after M6 ships. Listed so scope pressure has somewhere to go other than into the build.",
+    children: [
+      { label: "Replay driver (wall-clock playback)" },
+      { label: "Full latency and DR sweeps" },
+      { label: "MCMC storm identification (real, named)" },
+      { label: "Lateral-directional / tabulated 6-DOF" },
+      { label: "Virtual (human-in-loop) driver" },
+      { label: "DIS/TENA gateway for live entities" },
+      { label: "Scaling past two aircraft" },
+      { label: "T&E Level 2 certification track" }
+    ]
+  }
+};
+
+(function(){
+  const btns = Array.prototype.slice.call(document.querySelectorAll('.tabbtn'));
+  const panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
+  let roadmapBuilt = false;
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){
+      btns.forEach(function(x){ x.classList.toggle('on', x === b); });
+      panels.forEach(function(p){ p.classList.toggle('on', p.id === b.dataset.tab); });
+      window.scrollTo(0, 0);
+      if (b.dataset.tab === 't-roadmap' && !roadmapBuilt) { roadmapBuilt = true; buildRoadmap(); }
+    });
+  });
+
+  function buildRoadmap(){
+    const D = ROADMAP_DATA;
+    const canvas = document.getElementById('canvas');
+    const svg = document.getElementById('edges');
+    document.getElementById('rgoal').textContent = D.goal;
+    document.getElementById('rprinciple').textContent = 'Guiding principle: ' + D.principle;
+
+    const W = Math.max(960, Math.min(1080, canvas.parentElement.clientWidth || 1000));
+    const CX = W/2;
+    const MAIN_W = 250, CHILD_W = 235, GAP_X = 60, CHILD_GAP = 10, ROW_GAP = 52;
+
+    function esc(s){ const d=document.createElement('span'); d.textContent = s==null?'':s; return d.innerHTML; }
+    function mk(cls, html, w){
+      const el = document.createElement('div');
+      el.className = 'node ' + cls; el.style.width = w + 'px'; el.style.visibility = 'hidden';
+      el.innerHTML = html; canvas.appendChild(el); return el;
+    }
+    function place(el, x, y){
+      el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.visibility = 'visible';
+      return { el: el, x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+    }
+    function chip(s){ return (s === 'next' || s === 'active') ? '<span class="chip">'+s+'</span>' : ''; }
+    function mainHtml(m){ return '<span class="nid">'+esc(m.id)+'</span>'+esc(m.codename)+chip(m.status); }
+    function childHtml(c){ return (c.status==='done'?'<span class="ck">&#10003;</span>':'')+esc(c.label); }
+
+    const paths = [];
+    function edgeV(x1,y1,x2,y2,dotted){
+      paths.push('<path d="M'+x1+' '+y1+' C '+x1+' '+(y1+28)+', '+x2+' '+(y2-28)+', '+x2+' '+y2+
+        '" fill="none" stroke="var(--edge)" stroke-width="3"'+(dotted?' stroke-dasharray="2 7" stroke-linecap="round"':'')+'/>');
+    }
+    function edgeB(x1,y1,x2,y2){
+      const mx = (x1+x2)/2;
+      paths.push('<path d="M'+x1+' '+y1+' C '+mx+' '+y1+', '+mx+' '+y2+', '+x2+' '+y2+
+        '" fill="none" stroke="var(--edge-branch)" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>');
+    }
+
+    let y = 8, prevSpine = null;
+    const drawerData = {};
+
+    D.milestones.forEach(function(m){
+      drawerData[m.id] = m;
+      const left = [], right = [];
+      (m.children||[]).forEach(function(c,i){ (i%2===0?left:right).push(c); });
+      const mainEl = mk('main s-'+m.status, mainHtml(m), MAIN_W);
+      mainEl.dataset.open = m.id;
+      const mainH = mainEl.offsetHeight;
+      function stackH(arr){
+        let h = 0;
+        arr.forEach(function(c){ const e = mk('s-'+(c.status||'planned'), childHtml(c), CHILD_W); c._el = e; h += e.offsetHeight + CHILD_GAP; });
+        return Math.max(0, h - CHILD_GAP);
+      }
+      const lH = stackH(left), rH = stackH(right);
+      const blockH = Math.max(mainH, lH, rH);
+      const cy = y + blockH/2;
+      const mRect = place(mainEl, CX - MAIN_W/2, cy - mainH/2);
+      let ly = cy - lH/2;
+      left.forEach(function(c){
+        const r = place(c._el, CX - MAIN_W/2 - GAP_X - CHILD_W, ly);
+        c._el.dataset.open = m.id;
+        edgeB(mRect.x, cy, r.x + r.w, ly + r.el.offsetHeight/2); ly += r.el.offsetHeight + CHILD_GAP;
+      });
+      let ry = cy - rH/2;
+      right.forEach(function(c){
+        const r = place(c._el, CX + MAIN_W/2 + GAP_X, ry);
+        c._el.dataset.open = m.id;
+        edgeB(mRect.x + mRect.w, cy, r.x, ry + r.el.offsetHeight/2); ry += r.el.offsetHeight + CHILD_GAP;
+      });
+      if (prevSpine) edgeV(CX, prevSpine.y + prevSpine.h, CX, mRect.y, false);
+      prevSpine = mRect;
+      y += blockH + ROW_GAP;
+    });
+
+    const bandTop = y + 6, bandPad = 18, colGap = 22, bandX = 14, bandW = W - 28;
+    const colW = (bandW - 2*bandPad - 2*colGap) / 3;
+    const label = document.createElement('div');
+    label.className = 'band-label';
+    label.textContent = 'Parallel tracks \u2014 run alongside M0\u2013M6, gate nothing';
+    canvas.appendChild(label);
+
+    let maxColH = 0;
+    D.tracks.forEach(function(t, ti){
+      drawerData[t.id] = t;
+      const colX = bandX + bandPad + ti*(colW+colGap);
+      const tw = Math.min(colW, 225);
+      const title = mk('main s-'+t.status, mainHtml(t), tw);
+      title.dataset.open = t.id;
+      let cy2 = bandTop + bandPad + 26;
+      const tRect = place(title, colX + (colW - tw)/2, cy2);
+      cy2 += tRect.h + 12;
+      (t.children||[]).forEach(function(c){
+        const cw = Math.min(colW, 245);
+        const e = mk('s-'+(c.status||'planned'), childHtml(c), cw);
+        e.dataset.open = t.id;
+        const r = place(e, colX + (colW - cw)/2, cy2);
+        edgeB(tRect.x + tRect.w/2, tRect.y + tRect.h, r.x + r.w/2, r.y);
+        cy2 += r.el.offsetHeight + CHILD_GAP;
+      });
+      maxColH = Math.max(maxColH, cy2 - bandTop);
+    });
+    const bandH = maxColH + bandPad;
+    const band = document.createElement('div');
+    band.className = 'band';
+    band.style.cssText = 'left:'+bandX+'px;top:'+bandTop+'px;width:'+bandW+'px;height:'+bandH+'px';
+    canvas.insertBefore(band, canvas.firstChild.nextSibling);
+    label.style.cssText = 'left:'+(bandX+18)+'px;top:'+(bandTop-8)+'px';
+    edgeV(CX, prevSpine.y + prevSpine.h, CX, bandTop, true);
+    y = bandTop + bandH + ROW_GAP;
+
+    const hz = D.horizon;
+    drawerData[hz.id] = hz;
+    const hubEl = mk('hub', '<span class="nid">'+esc(hz.id)+'</span>'+esc(hz.codename), MAIN_W);
+    hubEl.dataset.open = hz.id;
+    const hubH = hubEl.offsetHeight;
+    const hzL = [], hzR = [];
+    hz.children.forEach(function(c,i){ (i%2===0?hzL:hzR).push(c); });
+    function hzStack(arr){
+      let h = 0;
+      arr.forEach(function(c){ const e = mk('s-horizon', esc(c.label), CHILD_W); c._el = e; h += e.offsetHeight + CHILD_GAP; });
+      return Math.max(0, h - CHILD_GAP);
+    }
+    const hlH = hzStack(hzL), hrH = hzStack(hzR);
+    const hBlock = Math.max(hubH, hlH, hrH);
+    const hcy = y + hBlock/2;
+    const hubRect = place(hubEl, CX - MAIN_W/2, hcy - hubH/2);
+    let hly = hcy - hlH/2;
+    hzL.forEach(function(c){
+      const r = place(c._el, CX - MAIN_W/2 - GAP_X - CHILD_W, hly);
+      c._el.dataset.open = hz.id;
+      edgeB(hubRect.x, hcy, r.x + r.w, hly + r.el.offsetHeight/2); hly += r.el.offsetHeight + CHILD_GAP;
+    });
+    let hry = hcy - hrH/2;
+    hzR.forEach(function(c){
+      const r = place(c._el, CX + MAIN_W/2 + GAP_X, hry);
+      c._el.dataset.open = hz.id;
+      edgeB(hubRect.x + hubRect.w, hcy, r.x, hry + r.el.offsetHeight/2); hry += r.el.offsetHeight + CHILD_GAP;
+    });
+    edgeV(CX, bandTop + bandH, CX, hubRect.y, true);
+    y += hBlock + 24;
+
+    canvas.style.height = y + 'px';
+    canvas.style.minWidth = W + 'px';
+    svg.setAttribute('width', W); svg.setAttribute('height', y);
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + y);
+    svg.innerHTML = paths.join('');
+
+    const drawer = document.getElementById('drawer');
+    const body = document.getElementById('drawer-body');
+    const statusColors = {done:'var(--done-mark)', active:'var(--accent2)', next:'var(--accent)',
+                          planned:'var(--text3)', horizon:'var(--purple)'};
+    function openDrawer(id){
+      const n = drawerData[id]; if(!n) return;
+      let h = '<div class="did">'+esc(n.id)+(n.title?' &middot; '+esc(n.title):'')+'</div><h2>'+esc(n.codename)+'</h2>'+
+        '<span class="dstatus" style="background:'+(statusColors[n.status]||'var(--text3)')+'">'+esc(n.status)+'</span>'+
+        '<p>'+esc(n.blurb||'')+'</p>';
+      if (n.stamps && n.stamps.length)
+        h += '<h4>Exit criteria</h4><ul>'+n.stamps.map(function(s){ return '<li>'+esc(s)+'</li>'; }).join('')+'</ul>';
+      if (n.children && n.children.length)
+        h += '<h4>Topics</h4><ul>'+n.children.map(function(c){ return '<li>'+(c.status==='done'?'&#10003; ':'')+esc(c.label)+'</li>'; }).join('')+'</ul>';
+      body.innerHTML = h; drawer.classList.add('open');
+    }
+    canvas.addEventListener('click', function(e){
+      const n = e.target.closest('.node'); if(!n) return;
+      if (n.dataset.open) openDrawer(n.dataset.open);
+    });
+    drawer.querySelector('.close').addEventListener('click', function(){ drawer.classList.remove('open'); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') drawer.classList.remove('open'); });
+  }
+})();
+</script>
+</body>
+</html>
