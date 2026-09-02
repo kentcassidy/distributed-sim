@@ -1081,13 +1081,15 @@ td code{font-size:11.5px}
     <tbody>
       <tr><td><strong>Base OS</strong></td><td>Ubuntu 22.04 LTS (Jammy)</td><td>Container base; glibc; the
       platform Portico is tested against. (ADR-0012)</td></tr>
-      <tr><td><strong>Compiler</strong></td><td>GCC 11 &mdash; <code>g++</code>, C++17</td><td>Model core and all
-      federates. (ADR-0003, ADR-0012)</td></tr>
+      <tr><td><strong>Compiler</strong></td><td>GCC 11 &mdash; <code>g++</code>; <code>-std=gnu++14</code> for
+      RTI-facing code</td><td>Model core and federates. Portico 2.1.0 headers use <code>throw()</code>-specs /
+      <code>auto_ptr</code> (removed in C++17), so RTI-facing units compile as gnu++14. (ADR-0003, ADR-0012)</td></tr>
       <tr><td><strong>Build system</strong></td><td>CMake (+ Ninja)</td><td>Configure/build; Portico headers and
       libs wired in via CMake.</td></tr>
       <tr><td><strong>RTI</strong></td><td>Portico 2.1.0 (linux64)</td><td>HLA middleware, IEEE 1516e C++;
-      native wrapper over a Java core. Libs in <code>$RTI_HOME/lib/gcc4</code>, headers in
-      <code>include/hla1516e</code>. (ADR-0001)</td></tr>
+      native wrapper over a Java core. Libs <code>-lrti1516e64 -lfedtime1516e64</code> in
+      <code>$RTI_HOME/lib/gcc4</code>, headers in <code>include/ieee1516e</code>, JVM in
+      <code>jre/lib/amd64/server</code>. (ADR-0001)</td></tr>
       <tr><td><strong>Bundled JRE</strong></td><td>Java SE 1.8.0_66 &middot; HotSpot 64-bit Server VM 25.66-b17</td>
       <td>Ships inside Portico (<code>$RTI_HOME/jre</code>); its <code>libjvm.so</code> loads behind each C++
       federate. No system JDK installed.</td></tr>

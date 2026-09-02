@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         iproute2 \
+        vim \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Portico RTI (vendored) --------------------------------------------------
@@ -45,16 +46,25 @@ RUN mkdir -p /opt \
     && rm /tmp/portico.tar.gz \
     && mv /opt/portico-2.1.0 /opt/portico
 
-# Portico runtime + build environment for lin64 (per Portico's README):
-#   lib/gcc4        -> native C++ wrapper libs  ([compiler] = gcc4; VERIFY with
-#                      `ls /opt/portico/lib` and change this token if different)
-#   jre/lib/server  -> Portico's bundled JVM (libjvm.so), loaded behind federates
-#   include/hla1516e-> HLA 1516e headers, used at COMPILE time via -I (in CMake,
-#                      not an env var)
+# Portico runtime + build environment for lin64 — taken from the shipped C++
+# example's compile/run script, which is the authoritative source for 2.1.0:
+#   lib/gcc4              -> native C++ wrapper libs: librti1516e64, libfedtime1516e64
+#   jre/lib/amd64/server  -> bundled JVM: libjvm.so + libjsig.so (Java 8 layout;
+#                            NOT jre/lib/server, which is the Java 9+ layout)
+#   include/ieee1516e     -> HLA 1516e headers (dir is ieee1516e, NOT hla1516e);
+#                            used at COMPILE time via -I in CMake, not an env var
+#
+# Federate build contract for Portico 2.1.0 (belongs in CMake; recorded here so
+# the toolchain agreement is visible):
+#   g++ -std=gnu++14 -fPIC -I$RTI_HOME/include/ieee1516e -DRTI_USES_STD_FSTREAM \
+#       <sources> -L$RTI_HOME/lib/gcc4 -lrti1516e64 -lfedtime1516e64 \
+#       -L$RTI_HOME/jre/lib/amd64/server -ljvm -ljsig
+#   gnu++14 is REQUIRED: the 2.1.0 headers use throw()-specs and std::auto_ptr,
+#   which ISO C++17 removed; GCC 11 defaults to C++17, so C++17 fails to compile.
 ENV RTI_HOME=/opt/portico \
     PORTICO_VERSION=${PORTICO_VERSION}
 ENV PATH="${RTI_HOME}/bin:${PATH}" \
-    LD_LIBRARY_PATH="${RTI_HOME}/lib/gcc4:${RTI_HOME}/jre/lib/server" \
+    LD_LIBRARY_PATH="${RTI_HOME}/lib/gcc4:${RTI_HOME}/jre/lib/amd64/server" \
     CLASSPATH="${RTI_HOME}/lib/portico.jar"
 
 # Image provenance — surfaces in `docker inspect` and SBOM tooling.

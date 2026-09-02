@@ -1,0 +1,13 @@
+Had to reconsolidate installs as 2.1 and 2.2 Portico are compatible with different Ubuntu and GCC apparently...
+
+Attempting backwards compatibility checks.
+
+Instructions from README.txt
+ Running on Unbuntu 12.04 LTS
+ -----------------------------
+ To run on Ubuntu, ensure you have g++ installed and then open a command prompt,
+ change into the directory, compile and run using the script:
+
+   * cd $RTI_HOME/examples/cpp/ieee1516e
+   * ./linux64.sh compile
+   * ./linux64.sh execute
