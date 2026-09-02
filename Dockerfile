@@ -33,18 +33,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Portico RTI (vendored) --------------------------------------------------
-# Place your Portico release at ./third_party/portico.tgz in the build context.
-# Any tarball with a single top-level directory works (--strip-components=1
-# normalizes it into /opt/portico regardless of that dir's name). To produce one
-# from your working install:  tar czf third_party/portico.tgz -C /opt portico
-#
-# Record provenance for the SBOM: set PORTICO_VERSION and keep the tarball's
-# sha256 in docs (see the SBOM note).
-ARG PORTICO_VERSION=unknown
-COPY third_party/portico.tgz /tmp/portico.tgz
+# The official Portico 2.1.0 linux64 release is vendored in the repo at
+# ./third_party/portico-2.1.0-linux64.tar.gz (~80 MB, tracked in git). It is
+# self-contained: RTI + Java deps + a bundled JRE (Java 1.8.0_66). The archive's
+# top-level dir is portico-2.1.0/, so --strip-components=1 lands it at /opt/portico.
+# sha256: 55eaffc11e08e1ad4abc20d58048558ccac96f6f40818271e620f27796416188
+ARG PORTICO_VERSION=2.1.0
+COPY third_party/portico-2.1.0-linux64.tar.gz /tmp/portico.tar.gz
 RUN mkdir -p /opt/portico \
-    && tar xzf /tmp/portico.tgz -C /opt/portico --strip-components=1 \
-    && rm /tmp/portico.tgz
+    && tar xzf /tmp/portico.tar.gz -C /opt/portico --strip-components=1 \
+    && rm /tmp/portico.tar.gz
 
 # Portico runtime + build environment for lin64 (per Portico's README):
 #   lib/gcc4        -> native C++ wrapper libs  ([compiler] = gcc4; VERIFY with

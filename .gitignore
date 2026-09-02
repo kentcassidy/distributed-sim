@@ -15,4 +15,4 @@ Thumbs.db
 # ── NOTE ──
 # Docker images are NOT files and never enter git — they rebuild from the
 # Dockerfile. The vendored RTI tarball IS tracked on purpose, so do not ignore it:
-!third_party/portico.tgz
+!third_party/portico-2.1.0-linux64.tar.gz
