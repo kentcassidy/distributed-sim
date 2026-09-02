@@ -33,3 +33,5 @@ Dependencies:
 -Later:		iproute2 (for tc netem -- post-MVP; needs NET_ADMIN on the container)
 
 Day 1: wire Portico find/link into my CMake skeleton so "vendor examples run" is a build-system test, not a one-off
+
+Portico tarball attached to the git repo along with new Dockerfile that automatically brings it to /opt/portico, exports ENV variables, and installs build/debug/network tooling.
