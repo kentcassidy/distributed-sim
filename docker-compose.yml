@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Distributed Flight-Dynamics Federation — dev / build orchestration
+# MVP: a single build+dev container (ADR-0012 base image) with the repo mounted.
+#   docker compose build
+#   docker compose run --rm dev        # drops you into /work with the toolchain
+# The multi-federate + tc netem harness is POST-MVP — scaffold sketched below.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dff/dev:local
+    working_dir: /work
+    # Edit on the host; compile/run/debug inside the container.
+    volumes:
+      - .:/work
+    # Keep an interactive shell available for `docker compose run`.
+    stdin_open: true
+    tty: true
+
+# ── POST-MVP: containerized federation with real link impairment (ADR-0008) ──
+# Uncomment and flesh out once the federation runs and netem returns to scope.
+# Each federate is its own container on a shared user network; `tc netem` shapes
+# the interface. netem requires the NET_ADMIN capability.
+#
+#  ship1:
+#    image: dff/dev:local
+#    command: ["/work/build/ship_federate", "--own", "AC-1", "--config", "/work/config/ship1.yaml"]
+#    volumes: [".:/work"]
+#    cap_add: ["NET_ADMIN"]           # required for `tc netem`
+#    networks: ["fed"]
+#
+#  ship2:
+#    image: dff/dev:local
+#    command: ["/work/build/ship_federate", "--own", "AC-2", "--config", "/work/config/ship2.yaml"]
+#    volumes: [".:/work"]
+#    cap_add: ["NET_ADMIN"]
+#    networks: ["fed"]
+#
+#  logger:
+#    image: dff/dev:local
+#    command: ["/work/build/logger_federate", "--out", "/work/runs"]
+#    volumes: [".:/work"]
+#    networks: ["fed"]
+#
+# networks:
+#   fed:
+#     driver: bridge

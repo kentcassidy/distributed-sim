@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVP Sprint Plan v0.4.0 &mdash; 13 Days to 9/13</title>
+<style>
+:root{
+  --bg:#f8f7f4;--surface:#fff;--surface2:#f1f0eb;--border:#d8d6cf;
+  --text:#2c2c2a;--text2:#5f5e5a;--text3:#888780;
+  --accent:#185FA5;--accent2:#0F6E56;--warn:#BA7517;--danger:#993C1D;--purple:#534AB7;--navy:#1B2A4A;
+  --mono:'SF Mono','Fira Code','Consolas',monospace;--sans:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a1a;--surface:#242424;--surface2:#2e2e2e;--border:#444;
+  --text:#d4d4d4;--text2:#a0a0a0;--text3:#707070;
+  --accent:#58a6ff;--accent2:#3fb950;--warn:#ffa657;--danger:#f0997b;--purple:#afa9ec;--navy:#85b7eb;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);color:var(--text);background:var(--bg);line-height:1.7;font-size:14.5px}
+.container{max-width:860px;margin:0 auto;padding:38px 24px 72px}
+h1{font-size:27px;font-weight:700;color:var(--navy);letter-spacing:-.5px;margin:0 0 6px}
+.sub{color:var(--text2);font-size:13.5px;margin-bottom:4px}
+.sub2{color:var(--text3);font-size:12.5px;margin-bottom:24px}
+h2{font-size:20px;font-weight:700;color:var(--navy);margin:38px 0 10px;padding-top:20px;border-top:2px solid var(--border)}
+h3{font-size:16px;font-weight:600;color:var(--text);margin:22px 0 8px}
+p{margin:0 0 13px}ul,ol{margin:0 0 13px 22px}li{margin:5px 0}
+strong{font-weight:700;color:var(--text)}em{font-style:italic}
+code{font-family:var(--mono);font-size:12.5px;background:var(--surface2);padding:1px 5px;border-radius:3px}
+.term{font-weight:700;color:var(--navy)}
+.lead{font-size:15px;border-left:3px solid var(--accent);background:var(--surface2);padding:14px 18px;border-radius:0 6px 6px 0;margin:0 0 20px}
+.note{border-left:3px solid var(--accent);background:var(--surface2);padding:11px 16px;border-radius:0 6px 6px 0;margin:15px 0;font-size:13.5px}
+.note.warn{border-left-color:var(--warn)}.note.ok{border-left-color:var(--accent2)}.note.danger{border-left-color:var(--danger)}.note.key{border-left-color:var(--purple)}
+.note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.note.warn .lbl{color:var(--warn)}.note.ok .lbl{color:var(--accent2)}.note.danger .lbl{color:var(--danger)}.note.key .lbl{color:var(--purple)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+th{background:var(--navy);color:#fff;text-align:left;padding:8px 11px;font-weight:600;font-size:12px}
+@media(prefers-color-scheme:dark){th{color:#1a1a1a}}
+td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:nth-child(even){background:var(--surface2)}
+.days td:first-child{white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--accent);font-weight:600}
+.chk{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:13px}
+.chk b{color:var(--warn)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+.gcell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px}
+.gcell .gt{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:5px}
+.gcell.keep{border-left:3px solid var(--accent2)}.gcell.cut{border-left:3px solid var(--danger)}
+.gcell p{font-size:12.5px;color:var(--text2);margin:0}
+svg.fig{width:100%;height:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin:16px 0}
+.cap{font-size:12px;color:var(--text3);margin:-6px 0 16px;font-style:italic}
+.footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text3)}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>MVP Sprint Plan</h1>
+  <p class="sub">v0.4.0 &mdash; thirteen days to a presentable minimum &middot; Sep 1 &ndash; Sep 13, 2026</p>
+  <p class="sub2">Rescopes the v0.3.0 charter to the real deadline. The charter still holds as the full vision; this is what actually gets built first. Partition invariance is the new V&amp;V spine.</p>
+
+  <p class="lead">Ship one thing, complete: a working HLA federation, in C++, where two aircraft each own their
+  own physics, one holds formation on its ghost of the other, and the result is shown to be
+  <strong>invariant to how the work is split across federates</strong> at zero impairment &mdash; then to
+  degrade predictably as network delay rises. A running federation with a real V&amp;V result and a clean,
+  documented repo. Nothing more, on time, beats anything more, late.</p>
+
+  <h2>What carries the argument</h2>
+  <p>The panel doubted two things: C++ depth and distributed-simulation experience. Every hour goes to the
+  smallest artifact that rebuts both. That artifact is a federation that <em>runs</em>, in C++, and produces a
+  result with a number on it. The result is partition invariance; the legibility is the repo. Those two are
+  load-bearing. Everything else waits.</p>
+
+  <div class="grid2">
+    <div class="gcell keep">
+      <div class="gt">Load-bearing &mdash; build first</div>
+      <p>C++ model core, entity-agnostic (owns a <em>list</em> of aircraft, partitioned by config) &middot;
+      linearized longitudinal model, verified against published modes &middot; two aircraft + logger on Portico
+      &middot; hand-authored FOM &middot; conservative time management &middot; one dead-reckoning algo (constant
+      velocity, fixed threshold) &middot; formation coupling on the ghost &middot; partition-invariance V&amp;V
+      &middot; one latency sweep &middot; public repo, ~6&ndash;7 ADRs, journal, 2-page V&amp;V writeup.</p>
+    </div>
+    <div class="gcell cut">
+      <div class="gt">Cut to post-9/13</div>
+      <p>Storm + Dryden turbulence &middot; Monte Carlo ensemble &middot; distribution-drift comparison &middot;
+      batch and replay drivers &middot; netem (use an in-federate delay buffer instead) &middot; second DR
+      algorithm &middot; DR-threshold and lookahead sweeps &middot; VM transparency run &middot; MCMC &middot;
+      lateral-directional / tabulated aero &middot; four-aircraft fractional ratios.</p>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <span class="lbl">Why the cuts are safe</span>
+    A running federation with a latency result rebuts both doubts completely. An unfinished ensemble rebuts
+    neither. The cut list is entirely enrichment on top of an already-complete argument &mdash; and every item
+    on it is one you can add after the 13th, in front of an audience, as &ldquo;here's where it's going next.&rdquo;
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">Cut fluff, never legibility</span>
+    The documentation is not fluff &mdash; it is the half of the rebuttal the panel couldn't see last time. A
+    bare pile of working code answers &ldquo;can he do distributed sim&rdquo; and completely fails
+    &ldquo;does he work in a way we can trust.&rdquo; Trim ADRs to the six or seven that matter, keep journal
+    entries to two lines, hold the V&amp;V report to two pages &mdash; but the clean, decision-documented public
+    repo stays. Cut the physics ambition, not the trail of reasoning.
+  </div>
+
+  <h2>The V&amp;V spine: partition invariance</h2>
+  <p>The validity claim is that <span class="term">the answer must not depend on how the work is divided across
+  federates.</span> It is the federation analog of numerical reproducibility, and it validates the distribution
+  itself &mdash; not just the physics.</p>
+
+  <svg class="fig" viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two partitions: both aircraft co-located on one federate versus split across two, compared for identical results">
+    <!-- co-located -->
+    <text x="180" y="28" font-family="var(--sans)" font-size="13" font-weight="700" fill="var(--navy)" text-anchor="middle">Co-located (loop is local)</text>
+    <rect x="60" y="42" width="240" height="70" rx="9" fill="var(--surface2)" stroke="var(--accent)" stroke-width="2"/>
+    <circle cx="120" cy="77" r="15" fill="var(--surface)" stroke="var(--navy)" stroke-width="1.5"/>
+    <text x="120" y="81" font-family="var(--mono)" font-size="10" fill="var(--navy)" text-anchor="middle">AC1</text>
+    <circle cx="240" cy="77" r="15" fill="var(--surface)" stroke="var(--navy)" stroke-width="1.5"/>
+    <text x="240" y="81" font-family="var(--mono)" font-size="10" fill="var(--navy)" text-anchor="middle">AC2</text>
+    <path d="M225 77 L135 77" stroke="var(--accent2)" stroke-width="2" marker-end="url(#a1)"/>
+    <text x="180" y="70" font-family="var(--sans)" font-size="9.5" fill="var(--accent2)" text-anchor="middle">local ghost</text>
+    <text x="180" y="128" font-family="var(--sans)" font-size="10.5" fill="var(--text3)" text-anchor="middle">Federate A</text>
+
+    <!-- split -->
+    <text x="540" y="28" font-family="var(--sans)" font-size="13" font-weight="700" fill="var(--navy)" text-anchor="middle">Split (loop crosses network)</text>
+    <rect x="420" y="42" width="110" height="70" rx="9" fill="var(--surface2)" stroke="var(--accent)" stroke-width="2"/>
+    <circle cx="475" cy="77" r="15" fill="var(--surface)" stroke="var(--navy)" stroke-width="1.5"/>
+    <text x="475" y="81" font-family="var(--mono)" font-size="10" fill="var(--navy)" text-anchor="middle">AC1</text>
+    <rect x="590" y="42" width="110" height="70" rx="9" fill="var(--surface2)" stroke="var(--accent)" stroke-width="2"/>
+    <circle cx="645" cy="77" r="15" fill="var(--surface)" stroke="var(--navy)" stroke-width="1.5"/>
+    <text x="645" y="81" font-family="var(--mono)" font-size="10" fill="var(--navy)" text-anchor="middle">AC2</text>
+    <path d="M630 77 L490 77" stroke="var(--warn)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+    <text x="560" y="70" font-family="var(--sans)" font-size="9.5" fill="var(--warn)" text-anchor="middle">network ghost</text>
+    <text x="475" y="128" font-family="var(--sans)" font-size="10.5" fill="var(--text3)" text-anchor="middle">Federate A</text>
+    <text x="645" y="128" font-family="var(--sans)" font-size="10.5" fill="var(--text3)" text-anchor="middle">Federate B</text>
+
+    <text x="360" y="165" font-family="var(--sans)" font-size="12.5" fill="var(--text2)" text-anchor="middle" font-weight="600">At zero impairment: results must match &rarr; distribution is transparent.</text>
+    <text x="360" y="186" font-family="var(--sans)" font-size="12.5" fill="var(--text2)" text-anchor="middle">Under latency: the split case degrades &rarr; the cost of the network being in the loop.</text>
+    <defs>
+      <marker id="a1" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--accent2)"/></marker>
+      <marker id="a2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--warn)"/></marker>
+    </defs>
+  </svg>
+  <p class="cap">Same scenario, same physics, two ways of splitting the work. The comparison is the V&amp;V.</p>
+
+  <h3>The two claims, in order</h3>
+  <ol>
+    <li><strong>Invariance (the validation).</strong> Run the identical deterministic scenario with both aircraft
+    co-located on one federate, then split one to each. At zero injected delay and zero DR error, the aggregate
+    trajectories must match within a tight tolerance. A match proves the distribution added nothing &mdash; the
+    federated answer equals the single-machine answer.</li>
+    <li><strong>Controlled breakdown (the result).</strong> Now sweep injected delay in the split case. The
+    follower's station-keeping degrades while the co-located case stays put. The gap between them, plotted
+    against delay, is the measured cost of putting the network inside the control loop &mdash; and it can be
+    cross-checked against the analytical delay-margin prediction.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="lbl">Why this idea fits the moment</span>
+    Cutting the ensemble left the MVP without a headline result. Partition invariance <em>is</em> a headline
+    result, and it needs no ensemble, no storm, no hundreds of runs &mdash; only the federation you were already
+    building, run twice and compared. It replaces the cut ensemble as the V&amp;V spine and doubles as the
+    latency result. This is the strongest single addition available inside 13 days.
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">Requirement, and the ratio caveat</span>
+    Exact invariance holds only for deterministic runs &mdash; <strong>no turbulence, conservative time
+    management</strong> &mdash; so comparison is meaningful. (Another reason the storm stays cut for the MVP: its
+    randomness would break bit-comparison.) Also: with strict entity ownership the divisible unit is the
+    <em>entity</em>, so two aircraft give &ldquo;co-located vs split,&rdquo; not literal 25/75. True fractional
+    ratios need a four-aircraft formation chain &mdash; a clean stretch goal, kept off the MVP path. Build the
+    core entity-agnostic now (owns a list, partition by config) so the four-aircraft version is later a config
+    change, not a rewrite.
+  </div>
+
+  <h2>The thirteen days</h2>
+  <p>Sequenced by dependency. Portico bring-up and time management are the two places days vanish, so both have
+  a checkpoint and a fallback. Documentation runs continuously, not as a final phase.</p>
+
+  <table class="days">
+    <thead><tr><th style="width:90px">Dates</th><th>Focus</th><th>Done when</th></tr></thead>
+    <tbody>
+      <tr><td>Sep 1</td><td><strong>Bootstrap.</strong> Repo, board, ~6&ndash;7 ADR stubs, journal, CMake, CI on
+      an empty target. Install Portico; run its shipped example federates. Decide the entity-agnostic core shape
+      up front.</td><td>CI green on empty build; vendor examples run locally.</td></tr>
+      <tr><td>Sep 2&ndash;4</td><td><strong>RTI handshake.</strong> Hand-author the FOM. Two federates: one
+      publishes one attribute, one subscribes; ambassador callbacks; full lifecycle. Best-effort, no time
+      management yet. <em>In parallel</em> (needs no RTI): start the model core.</td><td>Two processes exchange
+      an attribute and shut down cleanly.</td></tr>
+      <tr><td>Sep 4&ndash;6</td><td><strong>Flight model.</strong> Linearized longitudinal core, RK4, quaternion
+      attitude, scripted excitation. Verify eigenvalues against published short-period and phugoid. Wrap the core
+      as an aircraft federate that owns a list of one-or-more aircraft.</td><td>Modes match published within
+      tolerance; a federate publishes real aircraft state.</td></tr>
+      <tr><td>Sep 7&ndash;9</td><td><strong>Time management (danger zone).</strong> Both ships regulating +
+      constrained; advance-request/grant loop; pick and justify a lookahead. Deliberately induce the
+      zero-lookahead deadlock, then fix it.</td><td>Federation runs under conservative time; deadlock understood
+      and resolved.</td></tr>
+      <tr><td>Sep 9&ndash;10</td><td><strong>Coupling + impairment.</strong> Formation-keeping law reading the
+      dead-reckoned ghost. In-federate delay buffer for injectable latency. Logger records truth + ghost to
+      CSV.</td><td>Follower holds station at zero delay; delay is injectable.</td></tr>
+      <tr><td>Sep 10&ndash;12</td><td><strong>Partition-invariance V&amp;V.</strong> Run co-located vs split at
+      zero impairment &mdash; confirm the match. Sweep delay in the split case; plot the degradation with the
+      analytical prediction marked.</td><td>Match confirmed at zero impairment; one degradation plot
+      exists.</td></tr>
+      <tr><td>Sep 12&ndash;13</td><td><strong>Package.</strong> Two-page V&amp;V writeup with the plot; finish
+      the ADRs; hand-written retrospective; README with build + reproduce steps; board screenshots.</td><td>A
+      stranger can clone, build, and reproduce the figure.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Checkpoints and fallbacks &mdash; decide at these, don't drift past them</h3>
+  <div class="chk"><b>End of Sep 4 &mdash;</b> if two federates aren't exchanging an attribute yet, you're
+  behind on the hardest infrastructure. Stop adding scope; get the handshake working before anything else.</div>
+  <div class="chk"><b>End of Sep 9 &mdash;</b> if conservative time management isn't working, <em>fall back to
+  best-effort receive-order</em>, ship the federation without conservative time, and say so plainly in the
+  limitations. A running federation with honest limits beats a stalled one reaching for correctness. Time
+  management is the highest-value piece, so fight for it &mdash; but not past this line.</div>
+  <div class="chk"><b>End of Sep 11 &mdash;</b> you must have at least the co-located-vs-split match plus one
+  delay point. That is the minimum shippable result. Everything after is refinement of a result that already
+  exists.</div>
+
+  <div class="note danger">
+    <span class="lbl">The one failure mode to avoid</span>
+    Being 70% into the full v0.3.0 vision on Sep 13 with nothing that runs end to end. That is the only outcome
+    worse than a small complete thing. Protect completeness over ambition at every fork: a federation that runs,
+    validates, and is documented &mdash; even if it's two aircraft and an in-code delay buffer &mdash; is a
+    win. Reach for the storm and the ensemble <em>after</em> that exists, not before.
+  </div>
+
+  <h2>On the deadline framing itself</h2>
+  <p>A dropped-off project reopens a conversation; it is not itself a selection, and dropping it uninvited can
+  read either as impressive or as not taking the no. The lightest touch is best &mdash; a short, warm note to
+  the flight chief that you built it because the gap he named was fair, with a link, and no ask attached. Let the
+  work carry it. That means the work has to be <em>finished</em> by the 13th, which is the entire reason for
+  cutting to the MVP. Ship complete, then say &ldquo;here's where it goes next&rdquo; &mdash; and the cut list is
+  exactly that roadmap.</p>
+
+  <p class="footer">Sprint plan v0.4.0 &middot; rescopes charter v0.3.0 to the 9/13 deadline &middot; partition
+  invariance is the V&amp;V spine &middot; the cut list is the post-deadline roadmap, not lost work.</p>
+</div>
+</body>
+</html>

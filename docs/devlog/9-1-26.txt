@@ -1,0 +1,35 @@
+Writing in order of tasks and decision making.
+Today, I just need to bootstrap the repo, which means:
+ - Select container OS
+ - Install Portico
+ - Test compiler
+ - Set up CI
+ - Run entity-agnostic core on Portico
+
+Immediately, I'm deciding I should merge all documentation for this project into a single document. My experience building RNA tells me that linking various docs is a nightmare to upkeep, as they get either lost, outdated, or fall behind. ADRs will hold amendments in order of creation, and primary docs will fall into a single .html file. The scope of this project is small enough that everything should fit in a Claude context window for ease of information retrieval and updating.
+
+--To start, I am selecting Ubuntu 22.04 (Jammy Jellyfish), as Portico links against Ubuntu-native glibc. DO NOT USE MSVC COMPILER.
+--Debian is fine but I've already used it so I may as well explore here.
+--GCC 11.2+ (not Clang) || Portico compatibility
+--Use C++ 17 for ease of use and out the gate compatibility.
+--Use IEEE 1516e instead of legacy HLI
+
+My computer is AMD Ryzen 7 7700 8-Core
+ -- each core can be pinned to a federate
+ -- x86-64 compatible
+
+Dependencies:
+-Base:		ubuntu:22.04
+-Toolchain:	apt-get install build-essential
+			g++ 11, make
+			cmake
+			ninja-build
+-Java:		openjdk-<N>-jdk 	(matching Portico)
+-Portico:	extract release; export RTI_HOME, JAVA_HOME;
+		PATH += $RTI_HOME/bin;  LD_LIBRARY_PATH += $RTI_HOME/lib and the JVM's libjvm dir;
+		includes from $RTI_HOME/include/hla15116e;  link librti1516e (+ libfedtime1516e)
+		**Use Portico setup script
+-Debug:		gdb, valgrind
+-Later:		iproute2 (for tc netem -- post-MVP; needs NET_ADMIN on the container)
+
+Day 1: wire Portico find/link into my CMake skeleton so "vendor examples run" is a build-system test, not a one-off

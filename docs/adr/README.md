@@ -21,6 +21,8 @@ ADR supersedes it, and the superseded record is marked accordingly.
 | [0009](0009-isolation-constraint.md) | Strict isolation from other independent work | Accepted | — |
 | [0010](0010-storm-and-turbulence.md) | Rankine vortex storm with Dryden turbulence | Proposed | M2 |
 | [0011](0011-constructive-scope-virtual-accommodated.md) | Constructive scope; virtual accommodated by design | Proposed | M1 |
+| [0012](0012-container-base-image-and-toolchain.md) | Ubuntu 22.04 + GCC 11 base image and toolchain | Accepted | — |
+| [0013](0013-config-driven-entity-partition-model.md) | Config-driven entity/partition model — N aircraft over K containers | Accepted | — |
 
 **Status key.** *Proposed* — the decision is recorded but not yet locked; it
 moves to *Accepted* when resolved at or before the noted milestone. *Accepted* —
