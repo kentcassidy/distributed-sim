@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         iproute2 \
         vim \
+        tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Portico RTI (vendored) --------------------------------------------------
