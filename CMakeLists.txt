@@ -59,6 +59,11 @@ add_executable(example_federate
     src/federate/ExampleCPPFederate.cpp
     src/federate/ExampleFedAmb.cpp)
 
+add_custom_command(TARGET example_federate POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/federate/testfom.fed"
+        "$<TARGET_FILE_DIR:example_federate>")
+
 target_link_libraries(example_federate PRIVATE Portico::Portico)
 
 set_target_properties(example_federate PROPERTIES
