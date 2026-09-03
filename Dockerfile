@@ -76,6 +76,6 @@ LABEL org.opencontainers.image.title="dff-dev" \
 
 # Source is mounted at runtime (see docker-compose.yml), not baked in — this is a
 # development/build image, so edits on the host are picked up without a rebuild.
-WORKDIR /work
+WORKDIR /mnt
 
 CMD ["/bin/bash"]
