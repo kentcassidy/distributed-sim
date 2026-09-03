@@ -11,10 +11,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: dff/dev:local
-    working_dir: /work
+    working_dir: /mnt
     # Edit on the host; compile/run/debug inside the container.
     volumes:
-      - .:/work
+      - .:/mnt
     # Keep an interactive shell available for `docker compose run`.
     stdin_open: true
     tty: true

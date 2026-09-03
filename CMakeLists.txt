@@ -1,10 +1,5 @@
 # ═════════════════════════════════════════════════════════════════════════════
 # Distributed Flight-Dynamics Federation — root build script
-#
-# CMake is a build-system *generator*: you describe TARGETS (things to build) and
-# their REQUIREMENTS (include dirs, libs, flags), and CMake writes the actual
-# Makefiles/Ninja files. You then build those. You never hand-write compiler
-# command lines — you attach requirements to targets and CMake composes them.
 # ═════════════════════════════════════════════════════════════════════════════
 cmake_minimum_required(VERSION 3.16)          # ships with Ubuntu 20.04+/22.04
 
