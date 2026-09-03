@@ -1,0 +1,79 @@
+This is simply a reference document as I encounter concepts to remember. Why or what I considered in decision making. This is not canon and does not supersede the ADRs.
+
+M&S Paradigms:
+ - Discrete-Event Sim (DES)
+ 	- Model and run over set sequences
+	- Good for disease modeling
+ - Continuous Sim (CS) / System Dynamics
+	- Dynamic information feedback
+	- Interactive causal loops
+	- Good for resource behavior with multiple dynamic systems (e.g. L1 = Atmosphere and rain/drought, L2 = Animal + Vegetation growth and Emissions)
+*- Agent Based Modeling (ABM)
+ 	- Individual autonomous entities which may have local knowledge in shared environment
+	- Using this one for obvious reasons
+ - Data Driven M&S (DDS)
+	- Models parametrized by real data instead of model
+	- Dynamic DDS uses real-time data to detect the system model, feeds the sim results back into the model continuously to gain more accurate and on time results
+
+Simulation Paradigms:
+ - Local
+ - Parallel
+	- multiprocessor, thousands+ interactions per second
+ - Distributed
+	- loosely coupled, milliseconds or longer
+	--> Benefits include:
+		- split subcomputations
+		- distribution
+		- interoperability and reusability
+		- fault tolerance
+
+Simulation Protocol / Framework:
+ - Discrete Event System Specification (DEVS)?
+	--> Substantive (modeling) vs the rest which are technical
+ - Distributed Interaction Simulation (w PDUs)
+ 	- Started w DoD SIMNET
+	- Lacks middleware
+*- HLA with RTI
+	- DDM?
+	--> HLA 1.3
+		- legacy
+		- string-based
+		- no endianness std
+		- hardcoded single file FOM
+	--> IEEE 1516e is standard as of 2010
+		- strongly typed API
+		- standard Object Model Template (OMT) encoding rules
+		- modular FOMs
+		- fault tolerant (connect/disconnect)
+	--> Runtime Infrastructure (RTI) uses a publish/subscribe pattern
+ - Test and Training Enabling Architecture (TENA)
+	- TENA compliant applications, simulations
+	- TENA middleware
+	- TENA utilities
+	- Gateway for non-TENA systems
+	- Middleware data must be TENA Object Model
+	--> Goal is interoperability BETWEEN sims
+	- Still difficult due to partial time management ability compared with HLA
+ - Data Distribution Service (DDS)
+	--> Designed for real-time systems
+	- Simpler but less features
+	
+
+ - TCP vs UDP
+ 	- Head of Line blocking
+	- Congestion control Additive Increase Multiplicative Decrease (AIMD)
+	- TCP meltdown
+
+HLA Simulation Library
+*- Portico
+	--> apparently stronger standard using IEEE 1516e
+	- Decentralized
+ - CERTI --> using HLA 1.3
+ - MAK ??
+ - Pitch ??
+
+Sim scenario
+ - Multiple planes in storm.
+
+Sim goal
+ - Split world by region, delegate region.

@@ -11,3 +11,19 @@ Instructions from README.txt
    * cd $RTI_HOME/examples/cpp/ieee1516e
    * ./linux64.sh compile
    * ./linux64.sh execute
+
+Due to this version of Portico using C++11, we must conform to older build standards including:
+	-std=gnu++14			must be used to as older dynamic throw()-specs and auto_ptr were deleted in C++17
+	-D_GLIBCXX_USE_CXX11_ABI=0	std::string/wstring memory layouts used to use Copy-on-Write. If not accounted for, will lead to segfaults.
+
+
+Today I did an introductory study of the various simulation systems and paradigms as well as their protocols.
+I think we are in a good spot. Notes found in ADR/Handwritten Notes.txt.
+
+Also reviewing now the C++ build system. I know we are using gnu++, which doesn't compile to LLVM. But, I can go down the chain:
+
+Metabuild: CMake
+|
+Build: Ninja is Make alternative
+|
+Compiles .cpp to .o
