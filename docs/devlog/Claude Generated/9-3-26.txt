@@ -1,0 +1,69 @@
+DEVLOG — 2026-09-03 (Claude-generated session log)
+====================================================
+
+Focus: architecture decisions + source skeleton + CI, ahead of M1.
+
+WHAT HAPPENED
+-------------
+1. Distributed model settled (ADR-0015 — Accepted).
+   - Chose SPACE-partition over ENTITY-partition. Reason: rigid-elastic
+     collisions are pairwise; entity-partition forces cross-federate
+     coordination for every close pair. Space-partition makes the common-case
+     collision LOCAL (one federate owns both aircraft in its sector).
+   - A dedicated CONTROLLER federate assigns sectors. MVP: it just loads a
+     config file and delegates (dynamic rebalancing deferred).
+   - Ownership is the arbiter, not the controller: once one federate owns a
+     sector, HLA ownership guarantees a single authoritative computation.
+     Convergence comes from that singularity, not from ranking sims.
+   - Boundaries: halo ghosts + handoff. Interest filtering is manual, not DDM
+     (Portico 2.1.0 DDM is partial).
+   - Amends ADR-0013 (placement is now by region, not by static entity->fed).
+
+2. Core object model settled (ADR-0016 — Accepted).
+   - Composition-first; shallow inheritance only for interchangeable behaviour
+     behind an interface (DynamicsModel -> LinearLongitudinal; the RTI-mandated
+     FederateAmbassador override). No deep entity taxonomy; archetypes are DATA.
+   - Ownership discipline: exactly one owner (World owns Aircraft by value);
+     everyone else borrows (raw ptr / index / id).
+   - Core<->federate is COMPOSITION: the federate has-a World and calls
+     world_.advance(dt). World::advance is physics only (no RTI). The event loop
+     (join / requestTimeAdvance / publish / handoff / resign) lives in the
+     federate, wrapping the core. (Caught + corrected a mixed-layer scratch where
+     the RTI loop had been pasted into World::advance.)
+
+3. Source skeleton laid down (green build graph, stub mains).
+   - src/core (dff_core, C++17, RTI-free) + src/federate (aircraft_federate) +
+     src/controller (controller), both gnu++14 / old-ABI, linking Portico + core.
+   - Root CMake now add_subdirectory()s each; standard split lives per-target.
+   - Portico's shipped demo relocated to examples/portico-example/ as the
+     toolchain proof (target example_federate still builds + joins a federation).
+   - config/scenario.example.json (two aircraft closing on a seam at x=0);
+     foms/README.md (FOM is the hand-authored artifact).
+
+4. File/class map produced (which class in which file, and why) for core,
+   federate, controller. main.cpp = thin launcher; the federate is a class in
+   its own header/cpp, constructed by main(). Key model: an HLA object instance
+   (ObjectInstanceHandle) is married to a C++ Aircraft via a map in the federate.
+
+5. CI authored (.github/workflows/ci.yml): builds the dev image, runs cmake
+   inside it, smoke-runs the two stubs. Pushed to GitHub. Result: red on the
+   user's in-progress source — which confirms the container built and Portico
+   linked (env proven). Badge/green deferred until first real compiling slice.
+
+DOC SYNC
+--------
+- ADR index updated (0015, 0016 added; 0013 marked amended-by-0015).
+- Charter roadmap: M0 -> tail cleaned (journal satisfied by devlog); M4
+  "Worldspace" reframed to sector-based (controller, handoff, invariance across
+  the cut). Progress note refreshed (Sep 3).
+- Memory updated (space-partition + controller; do-not-touch-handwritten-devlog).
+
+OPEN / NEXT
+-----------
+- M1 RTI handshake not yet started (the schedule slip). Start Fri Sep 4:
+  minimal hand-authored FOM + one attribute pub/sub + clean lifecycle.
+- Begin core headers in parallel (State.hpp + Math.hpp first — no deps, no RTI).
+- SCOPE DECISION PENDING: collision (new, ADR-0015) vs formation-keeping (ADR-0007)
+  as the MVP coupling scenario. Doing both is too much; decide before M4.
+- Timeline re-forecast against the real calendar (holiday Mon Sep 7, half-days
+  next week, due Sun Sep 13) — proposed, awaiting sign-off before charter edit.

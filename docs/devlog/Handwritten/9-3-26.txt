@@ -62,6 +62,8 @@ Also the Kanban board is saturated with the near-term tasks. I want to practice 
 
 TIL #if 0, #endif can block functions from being processed by compiler. I guess the macro is a simple if false, makes sense.
 
+Session end 12:22AM 9/4
+
 ==================================================================================================
 DIRECT CLASSES THAT ARE APPLICABLE
 Classical Physics:

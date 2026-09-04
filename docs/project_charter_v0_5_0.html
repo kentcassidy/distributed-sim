@@ -180,6 +180,215 @@ td code{font-size:11.5px}
   <h2>MVP Scope &mdash; Thirteen Days to Sep&nbsp;13</h2>
   <p class="subtitle" style="margin-bottom:2px">Authoritative near-term plan &middot; Sep&nbsp;1&ndash;13, 2026 &middot; rescopes the four-week vision to the real deadline</p>
 
+  <!-- ═══════════════ The Thirteen Days — interactive versioned timeline ═══════════════ -->
+  <h2>The Thirteen Days</h2>
+  <p>Sequenced by dependency. Portico bring-up and time management are the two places days vanish, so both carry a
+  checkpoint and a fallback. Documentation runs continuously, not as a final phase. The plan is revised as reality
+  lands &mdash; <strong>step through the iterations with the arrows</strong> below; the latest is shown by default.</p>
+
+  <style>
+    .tl-nav{display:flex;align-items:center;gap:12px;margin:12px 0 6px}
+    .tl-arrow{font:700 18px var(--sans);line-height:1;width:32px;height:32px;border:1px solid var(--border);
+      border-radius:8px;background:var(--surface2);color:var(--text2);cursor:pointer}
+    .tl-arrow:disabled{opacity:.35;cursor:default}
+    .tl-cur{font:700 13px var(--sans);color:var(--navy);min-width:230px;text-align:center;line-height:1.3}
+    .tl-cur .sub{display:block;font-weight:500;font-size:11px;color:var(--text3)}
+    .tl-meta{font-size:12px;color:var(--text2);margin:2px 0 8px;line-height:1.55}
+    .tl-meta .when{font-weight:700;color:var(--navy)}
+    #tl-list{width:100%;border-collapse:collapse;margin-top:8px;font-size:12.5px}
+    #tl-list th{text-align:left;padding:5px 8px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
+    #tl-list td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+    #tl-list td.ph{font-weight:600;white-space:nowrap}
+    #tl-list td.dt{font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap}
+  </style>
+
+  <div class="tl-nav">
+    <button class="tl-arrow" id="tl-prev" aria-label="Older timeline">&lsaquo;</button>
+    <div class="tl-cur" id="tl-cur"></div>
+    <button class="tl-arrow" id="tl-next" aria-label="Newer timeline">&rsaquo;</button>
+  </div>
+  <div class="tl-meta" id="tl-meta"></div>
+  <svg id="tl-chart" class="topo" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Versioned project timeline"></svg>
+  <p class="cap" id="tl-cap"></p>
+  <table id="tl-list"></table>
+
+  <h3 style="margin-top:20px">Checkpoints and fallbacks &mdash; decide at these, don&rsquo;t drift past them</h3>
+  <div id="tl-ck"></div>
+
+  <div class="note ok">
+    <span class="lbl">Progress &mdash; M0 complete, M1 next (Sep 3)</span>
+    <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored and building;
+    a federate that creates and joins a federation; the <code>src/</code> skeleton (green build graph); the object
+    model and sector/controller architecture (ADRs&nbsp;0015&ndash;0016). <strong>Next:</strong> the M1 RTI handshake
+    against a trivial FOM, with the RTI-free core headers started in parallel. The session journal lives in
+    <code>docs/devlog/</code>.
+  </div>
+
+  <script>(function(){
+    var V = [
+      { id:"v1", label:"Original", when:"Sep 1", day:1,
+        note:"The initial dependency-sequenced plan, before the Portico/ABI overrun.",
+        phases:[
+          {name:"Bootstrap",     s:1,e:1, focus:"Repo, board, ADRs, CMake, CI; run Portico's example.", done:"CI green; vendor examples run."},
+          {name:"RTI handshake", s:2,e:4, focus:"Hand-author FOM; two federates exchange one attribute; lifecycle.", done:"Two processes exchange an attribute cleanly."},
+          {name:"Flight model",  s:4,e:6, focus:"Linearized longitudinal, RK4, quaternion; verify modes; wrap as federate.", done:"Modes match; federate publishes real state."},
+          {name:"Time mgmt",     s:7,e:9, focus:"Regulating + constrained; advance/grant; lookahead; induce and fix deadlock.", done:"Conservative time runs; deadlock resolved."},
+          {name:"Coupling",      s:9,e:10, focus:"Formation-keeping on the ghost; in-federate delay buffer; CSV logger.", done:"Follower holds station; delay injectable."},
+          {name:"Partition V&amp;V", s:10,e:12, focus:"Co-located vs split match; sweep delay; plot vs prediction.", done:"Match confirmed; one degradation plot."},
+          {name:"Package",       s:12,e:13, focus:"2-page writeup; finish ADRs; retrospective; README.", done:"A stranger can clone, build, reproduce."}
+        ],
+        checks:[
+          {day:4, text:"Two federates exchanging an attribute &mdash; or you're behind on the hardest infrastructure."},
+          {day:9, text:"If conservative time management isn't working, fall back to best-effort receive-order and ship with honest limits."},
+          {day:11, text:"Co-located-vs-split match plus one delay point &mdash; the minimum shippable result."}
+        ]
+      },
+      { id:"v2", label:"Revised", when:"Sep 3", day:3,
+        note:"Re-forecast after the Portico/ABI overrun and the sector/controller decisions (ADR-0015/0016). The holiday (Mon Sep 7) and half-days next week absorb the time-management danger zone.",
+        standing:"through Bootstrap, with the src/ skeleton and object model (ADR-0016) worked ahead of schedule",
+        marks:[{day:7,label:"holiday"},{day:8,label:"½"},{day:9,label:"½"},{day:10,label:"½"},{day:11,label:"½"}],
+        phases:[
+          {name:"Bootstrap",             s:1,e:3, status:"done", focus:"Container, Portico, CMake, src/ skeleton, ADRs 0015/0016.", done:"Federate builds and joins; skeleton green."},
+          {name:"RTI handshake",         s:4,e:5, focus:"Trivial FOM; one-attribute pub/sub; clean lifecycle. Core headers in parallel.", done:"Two federates exchange an attribute."},
+          {name:"Flight model",          s:6,e:6, focus:"RK4 + linearized longitudinal; eigenvalue check; publish real state.", done:"Modes match; federate publishes state."},
+          {name:"Time mgmt + Worldspace",s:7,e:9, focus:"Holiday full-day: regulating/constrained + deadlock; sector ownership, ghosts, handoff.", done:"Conservative time runs; sectors own and hand off."},
+          {name:"Collision + controller",s:8,e:9, focus:"Interior elastic collision; controller assigns sectors from config.", done:"Local collision resolves; controller delegates."},
+          {name:"Partition V&amp;V",     s:10,e:11, focus:"Co-located vs split match; one delay point via in-federate buffer.", done:"Match at zero impairment; one delay point."},
+          {name:"Buffer + package",      s:12,e:13, focus:"Slack, then writeup, ADRs, retrospective, README.", done:"A stranger can clone, build, reproduce."}
+        ],
+        checks:[
+          {day:5, text:"Handshake working (two federates exchange an attribute)."},
+          {day:7, text:"If conservative time management isn't working by end of the holiday, fall back to best-effort receive-order."},
+          {day:11, text:"Co-located-vs-split match plus one delay point &mdash; minimum shippable (unchanged)."}
+        ]
+      }
+    ];
+
+    // CURRENT actual project status, by phase name. Update as reality lands;
+    // the ghost on every PREVIOUS timeline is derived from this single source.
+    var STATUS = { done:["Bootstrap"], active:["RTI handshake"] };
+    function statusOf(name){
+      if(STATUS.done.indexOf(name)>=0) return 'done';
+      if(STATUS.active.indexOf(name)>=0) return 'active';
+      return '';
+    }
+
+    var NOW = V[V.length-1].day;   // today's real day == the latest snapshot's day
+    var idx = V.length-1;          // start on the most current
+
+    var X0=158, DX=42, LABELX=126, DOTX=140, RH=24, BH=13, AX=30, ROWTOP=48;
+    function dayX(d){ return X0 + (d-1)*DX; }
+    function dayC(d){ return dayX(d) + DX/2; }
+
+    function render(){
+      var v=V[idx], i, p=[], maxY=0;
+      var isCurrent=(idx===V.length-1);
+      var revisionDay = isCurrent ? null : V[idx+1].day;
+
+      document.getElementById('tl-cur').innerHTML =
+        v.label+' &middot; '+v.when+(isCurrent?' &middot; current':'')+'<span class="sub">'+(idx+1)+' / '+V.length+'</span>';
+      document.getElementById('tl-prev').disabled = (idx===0);
+      document.getElementById('tl-next').disabled = (idx===V.length-1);
+
+      var meta;
+      if(isCurrent){
+        meta = '<span class="when">'+v.label+' &middot; made '+v.when+' &middot; current.</span> '+v.note;
+      } else {
+        meta = '<span class="when">'+v.label+' &middot; made '+v.when+' &middot; superseded '+V[idx+1].when+'.</span> '+v.note+
+          ' <em>Ghost = the project&rsquo;s current status mapped onto this old plan (a dot at every phase). Solid line: the day this plan was revised. Dotted line: today.</em>';
+      }
+      document.getElementById('tl-meta').innerHTML = meta;
+
+      var N=v.phases.length;
+      var bottom = ROWTOP + N*RH + 6;
+      var svg=document.getElementById('tl-chart');
+
+      for(var d=1; d<=13; d++){
+        var gx=dayX(d);
+        p.push('<line x1="'+gx+'" y1="'+AX+'" x2="'+gx+'" y2="'+bottom+'" stroke="var(--border)"/>');
+        if(d%2===1) p.push('<text x="'+gx+'" y="'+(AX-6)+'" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">'+(d===1?'Sep 1':d)+'</text>');
+      }
+      if(v.marks) for(i=0;i<v.marks.length;i++){ var m=v.marks[i]; p.push('<text x="'+dayC(m.day)+'" y="'+(AX+10)+'" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="var(--text3)">'+m.label+'</text>'); }
+
+      for(i=0;i<N;i++){
+        var ph=v.phases[i], y=ROWTOP + i*RH;
+        var bx=dayX(ph.s), bw=(ph.e-ph.s+1)*DX;
+        p.push('<text x="'+LABELX+'" y="'+(y+BH-1)+'" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">'+ph.name+'</text>');
+        if(isCurrent){
+          var isDone=(ph.status==='done'), isNow=(!isDone && NOW>=ph.s && NOW<=ph.e);
+          var fill=isDone?'var(--done-mark)':(isNow?'var(--warn)':'var(--surface2)');
+          var stroke=isDone?'none':'var(--accent)';
+          p.push('<rect x="'+bx+'" y="'+(y-1)+'" width="'+bw+'" height="'+BH+'" rx="3" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.4"/>');
+        } else {
+          p.push('<rect x="'+bx+'" y="'+(y-1)+'" width="'+bw+'" height="'+BH+'" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>');
+          var st=statusOf(ph.name);
+          if(st==='done'||st==='active') p.push('<rect x="'+bx+'" y="'+(y-1)+'" width="'+bw+'" height="'+BH+'" rx="3" fill="'+(st==='done'?'var(--done-mark)':'var(--warn)')+'" opacity="0.18"/>');
+          var df=(st==='done')?'var(--done-mark)':(st==='active')?'var(--warn)':'none';
+          var ds=(st==='')?'var(--text3)':'none';
+          p.push('<circle cx="'+DOTX+'" cy="'+(y+BH/2-1)+'" r="4" fill="'+df+'" stroke="'+ds+'" stroke-width="1"/>');
+        }
+      }
+
+      if(!isCurrent){
+        var rvx=dayC(revisionDay);
+        p.push('<line x1="'+rvx+'" y1="'+AX+'" x2="'+rvx+'" y2="'+(bottom+4)+'" stroke="var(--navy)" stroke-width="1.6"/>');
+        p.push('<text x="'+rvx+'" y="'+(bottom+15)+'" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--navy)">revised</text>');
+      }
+      var tx=dayC(NOW);
+      p.push('<line x1="'+tx+'" y1="'+AX+'" x2="'+tx+'" y2="'+(bottom+4)+'" stroke="var(--text2)" stroke-width="1.4" stroke-dasharray="3 3"/>');
+      p.push('<text x="'+tx+'" y="'+(bottom+(isCurrent?15:26))+'" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--text2)">today</text>');
+      maxY = bottom + (isCurrent?15:26);
+
+      var items=[{t:'sw',fill:'var(--surface2)',stroke:'var(--accent)',label:'Planned'}];
+      if(isCurrent){
+        items.push({t:'sw',fill:'var(--done-mark)',label:'Done'});
+        items.push({t:'sw',fill:'var(--warn)',label:'In progress'});
+        items.push({t:'line',dash:true,stroke:'var(--text2)',label:'Today'});
+      } else {
+        items.push({t:'dot',fill:'var(--done-mark)',label:'Now: done'});
+        items.push({t:'dot',fill:'var(--warn)',label:'Now: active'});
+        items.push({t:'dot',fill:'none',stroke:'var(--text3)',label:'Now: pending'});
+        items.push({t:'line',dash:false,stroke:'var(--navy)',label:'Revised'});
+        items.push({t:'line',dash:true,stroke:'var(--text2)',label:'Today'});
+      }
+      var lx=LABELX, ly=maxY+16, RIGHT=708;
+      for(i=0;i<items.length;i++){
+        var it=items[i], w=20 + it.label.length*5.3;
+        if(lx+w>RIGHT){ lx=LABELX; ly+=16; }
+        if(it.t==='sw') p.push('<rect x="'+lx+'" y="'+(ly-8)+'" width="14" height="9" rx="2" fill="'+it.fill+'" stroke="'+(it.stroke||'none')+'" stroke-width="1.4"/>');
+        else if(it.t==='dot') p.push('<circle cx="'+(lx+6)+'" cy="'+(ly-3)+'" r="4" fill="'+it.fill+'" stroke="'+(it.stroke||'none')+'" stroke-width="1"/>');
+        else p.push('<line x1="'+lx+'" y1="'+(ly-3)+'" x2="'+(lx+14)+'" y2="'+(ly-3)+'" stroke="'+it.stroke+'" stroke-width="1.6"'+(it.dash?' stroke-dasharray="3 3"':'')+'/>');
+        p.push('<text x="'+(lx+18)+'" y="'+ly+'" font-family="var(--sans)" font-size="9" fill="var(--text2)">'+it.label+'</text>');
+        lx += w + 8; if(ly>maxY) maxY=ly;
+      }
+
+      svg.setAttribute('viewBox','0 0 720 '+(maxY+10));
+      svg.innerHTML = p.join('');
+
+      document.getElementById('tl-cap').innerHTML = isCurrent
+        ? 'The current plan. Bars show planned phases with live status; the dashed line is today.'
+        : 'A superseded plan. The ghost dots and shading show where the project actually is now; the solid line marks the day it was replaced, the dashed line is today.';
+
+      var rows='<thead><tr><th>Phase</th><th>Dates</th><th>Focus</th><th>Done when</th></tr></thead><tbody>';
+      for(i=0;i<N;i++){
+        var q=v.phases[i];
+        var dt = q.s===q.e ? ('Sep '+q.s) : ('Sep '+q.s+'–'+q.e);
+        var tag = q.status==='done' ? ' ✓' : '';
+        rows += '<tr><td class="ph">'+q.name+tag+'</td><td class="dt">'+dt+'</td><td>'+q.focus+'</td><td>'+q.done+'</td></tr>';
+      }
+      rows += '</tbody>';
+      document.getElementById('tl-list').innerHTML = rows;
+
+      var ck='';
+      for(i=0;i<v.checks.length;i++){ var c=v.checks[i]; ck += '<div class="chk"><b>Sep '+c.day+' &mdash;</b> '+c.text+'</div>'; }
+      document.getElementById('tl-ck').innerHTML = ck;
+    }
+
+    document.getElementById('tl-prev').addEventListener('click', function(){ if(idx>0){ idx--; render(); } });
+    document.getElementById('tl-next').addEventListener('click', function(){ if(idx<V.length-1){ idx++; render(); } });
+    render();
+  })();</script>
+
   <p class="lead">Ship one thing, complete: a working HLA federation, in C++, where two aircraft each own their
   own physics, one holds formation on its ghost of the other, and the result is shown to be
   <strong>invariant to how the work is split across federates</strong> at zero impairment &mdash; then to
@@ -305,117 +514,8 @@ td code{font-size:11.5px}
     bit-exact. (ADR-0013.)
   </div>
 
-  <h2>The Thirteen Days</h2>
-  <p>Sequenced by dependency. Portico bring-up and time management are the two places days vanish, so both have a
-  checkpoint and a fallback. Documentation runs continuously, not as a final phase.</p>
 
-  <table class="days">
-    <thead><tr><th style="width:90px">Dates</th><th>Focus</th><th>Done when</th></tr></thead>
-    <tbody>
-      <tr><td>Sep 1</td><td><strong>Bootstrap.</strong> Repo, board, ~6&ndash;7 ADR stubs, journal, CMake, CI on
-      an empty target. Install Portico; run its shipped example federates. Decide the entity-agnostic core shape
-      and the container base image (Ubuntu&nbsp;22.04 + GCC&nbsp;11, ADR-0012) up front.</td><td>CI green on empty
-      build; vendor examples run locally.</td></tr>
-      <tr><td>Sep 2&ndash;4</td><td><strong>RTI handshake.</strong> Hand-author the FOM. Two federates: one
-      publishes one attribute, one subscribes; ambassador callbacks; full lifecycle. Best-effort, no time
-      management yet. <em>In parallel</em> (needs no RTI): start the model core.</td><td>Two processes exchange an
-      attribute and shut down cleanly.</td></tr>
-      <tr><td>Sep 4&ndash;6</td><td><strong>Flight model.</strong> Linearized longitudinal core, RK4, quaternion
-      attitude, scripted excitation. Verify eigenvalues against published short-period and phugoid. Wrap the core
-      as an aircraft federate that owns a list of one-or-more aircraft.</td><td>Modes match published within
-      tolerance; a federate publishes real aircraft state.</td></tr>
-      <tr><td>Sep 7&ndash;9</td><td><strong>Time management (danger zone).</strong> Both ships regulating +
-      constrained; advance-request/grant loop; pick and justify a lookahead. Deliberately induce the
-      zero-lookahead deadlock, then fix it.</td><td>Federation runs under conservative time; deadlock understood
-      and resolved.</td></tr>
-      <tr><td>Sep 9&ndash;10</td><td><strong>Coupling + impairment.</strong> Formation-keeping law reading the
-      dead-reckoned ghost. In-federate delay buffer for injectable latency (netem is post-MVP &mdash; ADR-0008).
-      Logger records truth + ghost to CSV.</td><td>Follower holds station at zero delay; delay is injectable.</td></tr>
-      <tr><td>Sep 10&ndash;12</td><td><strong>Partition-invariance V&amp;V.</strong> Run co-located vs split at
-      zero impairment &mdash; confirm the match. Sweep delay in the split case; plot the degradation with the
-      analytical prediction marked.</td><td>Match confirmed at zero impairment; one degradation plot exists.</td></tr>
-      <tr><td>Sep 12&ndash;13</td><td><strong>Package.</strong> Two-page V&amp;V writeup with the plot; finish the
-      ADRs; hand-written retrospective; README with build + reproduce steps; board screenshots.</td><td>A stranger
-      can clone, build, and reproduce the figure.</td></tr>
-    </tbody>
-  </table>
 
-  <h3>Expected vs. actual</h3>
-  <svg class="topo" viewBox="0 0 720 262" xmlns="http://www.w3.org/2000/svg" role="img"
-       aria-label="Planned 13-day schedule versus actual progress. Bootstrap, planned for Sep 1, actually ran Sep 1 to 2; the remaining phases are planned only. Today is Sep 2.">
-    <!-- date axis + gridlines -->
-    <line x1="155" y1="28" x2="155" y2="210" stroke="var(--border)"/>
-    <line x1="245" y1="28" x2="245" y2="210" stroke="var(--border)"/>
-    <line x1="335" y1="28" x2="335" y2="210" stroke="var(--border)"/>
-    <line x1="425" y1="28" x2="425" y2="210" stroke="var(--border)"/>
-    <line x1="515" y1="28" x2="515" y2="210" stroke="var(--border)"/>
-    <line x1="605" y1="28" x2="605" y2="210" stroke="var(--border)"/>
-    <line x1="695" y1="28" x2="695" y2="210" stroke="var(--border)"/>
-    <text x="155" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">Sep 1</text>
-    <text x="245" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">3</text>
-    <text x="335" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">5</text>
-    <text x="425" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">7</text>
-    <text x="515" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">9</text>
-    <text x="605" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">11</text>
-    <text x="695" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">13</text>
-
-    <!-- planned tracks (hollow) + row labels -->
-    <text x="146" y="51"  text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Bootstrap</text>
-    <rect x="155" y="39"  width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="77"  text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">RTI handshake</text>
-    <rect x="200" y="65"  width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="103" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Flight model</text>
-    <rect x="290" y="91"  width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="129" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Time mgmt</text>
-    <rect x="425" y="117" width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="155" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Coupling</text>
-    <rect x="515" y="143" width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="181" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Partition V&amp;V</text>
-    <rect x="560" y="169" width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="146" y="207" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Package</text>
-    <rect x="650" y="195" width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-
-    <!-- actual (solid): Bootstrap ran Sep 1–2; green to plan, amber for the overrun -->
-    <rect x="155" y="42" width="45" height="7" rx="2" fill="var(--done-mark)"/>
-    <rect x="200" y="42" width="45" height="7" rx="2" fill="var(--warn)"/>
-
-    <!-- today marker -->
-    <line x1="200" y1="28" x2="200" y2="214" stroke="var(--text2)" stroke-width="1.4" stroke-dasharray="3 3"/>
-    <text x="200" y="224" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--text2)">today</text>
-
-    <!-- legend -->
-    <rect x="155" y="240" width="16" height="10" rx="2" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="176" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Planned</text>
-    <rect x="245" y="240" width="16" height="10" rx="2" fill="var(--done-mark)"/>
-    <text x="266" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Actual (done)</text>
-    <rect x="370" y="240" width="16" height="10" rx="2" fill="var(--warn)"/>
-    <text x="391" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Over plan</text>
-    <line x1="470" y1="245" x2="490" y2="245" stroke="var(--text2)" stroke-width="1.4" stroke-dasharray="3 3"/>
-    <text x="495" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Today</text>
-  </svg>
-  <p class="cap">Planned schedule (hollow) vs. actual (solid). Bootstrap ran ~1 day over &mdash; the Portico
-  ABI/toolchain work &mdash; and the rest remains on plan. Update the solid bars as each phase completes.</p>
-
-  <div class="note ok">
-    <span class="lbl">Progress &mdash; M0 essentially complete (Sep 3)</span>
-    <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored and
-    building; a CMake-built C++ federate that creates and joins a federation; the <code>src/</code> skeleton
-    (<code>dff_core</code> + <code>aircraft_federate</code> + <code>controller</code>, green build graph);
-    ADRs&nbsp;0012&ndash;0015; baseline committed. <strong>In flight:</strong> M1 RTI handshake (hand-authored
-    FOM, pub/sub, lifecycle). <strong>M0 tail still open:</strong> CI on an empty build, the Kanban board, and
-    decomposing the schedule into tracked issues (the session journal lives in <code>docs/devlog/</code>).
-  </div>
-
-  <h3>Checkpoints and fallbacks &mdash; decide at these, don&rsquo;t drift past them</h3>
-  <div class="chk"><b>End of Sep 4 &mdash;</b> if two federates aren&rsquo;t exchanging an attribute yet,
-  you&rsquo;re behind on the hardest infrastructure. Stop adding scope; get the handshake working before anything
-  else.</div>
-  <div class="chk"><b>End of Sep 9 &mdash;</b> if conservative time management isn&rsquo;t working, <em>fall back
-  to best-effort receive-order</em>, ship the federation without conservative time, and say so plainly in the
-  limitations. A running federation with honest limits beats a stalled one reaching for correctness. Time
-  management is the highest-value piece, so fight for it &mdash; but not past this line.</div>
-  <div class="chk"><b>End of Sep 11 &mdash;</b> you must have at least the co-located-vs-split match plus one delay
-  point. That is the minimum shippable result. Everything after is refinement of a result that already exists.</div>
 
   <div class="note danger">
     <span class="lbl">The one failure mode to avoid</span>
