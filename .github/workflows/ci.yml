@@ -1,0 +1,34 @@
+name: CI
+
+# Build the project inside the EXACT dev container (ADR-0012 base image), so that
+# "dev environment == CI == the experiment": if it builds here from a clean
+# checkout, a stranger can reproduce it. Green on the skeleton today; it stays
+# green as real code lands. This is the "CI green on an empty build" M0 item.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # The vendored Portico tarball (third_party/…tar.gz) is committed in the
+      # repo, so a plain checkout is all the build context needs.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Builds the Ubuntu 22.04 + GCC 11 + Portico image from the Dockerfile.
+      - name: Build the dev image
+        run: docker compose build dev
+
+      # Configure + compile with CMake INSIDE the container, exactly as you do
+      # locally. RTI_HOME and the toolchain are already baked into the image.
+      - name: Configure and build
+        run: docker compose run --rm dev bash -c "cmake -S . -B build && cmake --build build -j"
+
+      # Smoke-run the two stub executables (they just print and exit 0 — no RTI,
+      # no network). Proves the binaries link and load. We deliberately do NOT
+      # run example_federate here, since it boots a JVM and joins a federation.
+      - name: Smoke-run the stubs
+        run: docker compose run --rm dev bash -c "./build/src/federate/aircraft_federate && ./build/src/controller/controller"
