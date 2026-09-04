@@ -1,6 +1,6 @@
 # ADR-0004: Frame the Project as a Validation Study, Present It as a Result
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

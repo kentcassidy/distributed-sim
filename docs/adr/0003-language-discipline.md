@@ -1,6 +1,6 @@
 # ADR-0003: C++ for Model, Federates, and Ensemble; Scripting Only for Plots
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

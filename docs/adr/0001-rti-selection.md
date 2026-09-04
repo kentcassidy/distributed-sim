@@ -1,6 +1,6 @@
 # ADR-0001: Use Portico as the RTI
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

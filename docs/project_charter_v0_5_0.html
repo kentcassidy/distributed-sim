@@ -340,6 +340,71 @@ td code{font-size:11.5px}
     </tbody>
   </table>
 
+  <h3>Expected vs. actual</h3>
+  <svg class="topo" viewBox="0 0 720 262" xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="Planned 13-day schedule versus actual progress. Bootstrap, planned for Sep 1, actually ran Sep 1 to 2; the remaining phases are planned only. Today is Sep 2.">
+    <!-- date axis + gridlines -->
+    <line x1="155" y1="28" x2="155" y2="210" stroke="var(--border)"/>
+    <line x1="245" y1="28" x2="245" y2="210" stroke="var(--border)"/>
+    <line x1="335" y1="28" x2="335" y2="210" stroke="var(--border)"/>
+    <line x1="425" y1="28" x2="425" y2="210" stroke="var(--border)"/>
+    <line x1="515" y1="28" x2="515" y2="210" stroke="var(--border)"/>
+    <line x1="605" y1="28" x2="605" y2="210" stroke="var(--border)"/>
+    <line x1="695" y1="28" x2="695" y2="210" stroke="var(--border)"/>
+    <text x="155" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">Sep 1</text>
+    <text x="245" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">3</text>
+    <text x="335" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">5</text>
+    <text x="425" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">7</text>
+    <text x="515" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">9</text>
+    <text x="605" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">11</text>
+    <text x="695" y="22" text-anchor="middle" font-family="var(--sans)" font-size="9.5" fill="var(--text3)">13</text>
+
+    <!-- planned tracks (hollow) + row labels -->
+    <text x="146" y="51"  text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Bootstrap</text>
+    <rect x="155" y="39"  width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="77"  text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">RTI handshake</text>
+    <rect x="200" y="65"  width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="103" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Flight model</text>
+    <rect x="290" y="91"  width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="129" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Time mgmt</text>
+    <rect x="425" y="117" width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="155" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Coupling</text>
+    <rect x="515" y="143" width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="181" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Partition V&amp;V</text>
+    <rect x="560" y="169" width="90" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="146" y="207" text-anchor="end" font-family="var(--sans)" font-size="10" fill="var(--text2)">Package</text>
+    <rect x="650" y="195" width="45" height="13" rx="3" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+
+    <!-- actual (solid): Bootstrap ran Sep 1–2; green to plan, amber for the overrun -->
+    <rect x="155" y="42" width="45" height="7" rx="2" fill="var(--done-mark)"/>
+    <rect x="200" y="42" width="45" height="7" rx="2" fill="var(--warn)"/>
+
+    <!-- today marker -->
+    <line x1="200" y1="28" x2="200" y2="214" stroke="var(--text2)" stroke-width="1.4" stroke-dasharray="3 3"/>
+    <text x="200" y="224" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--text2)">today</text>
+
+    <!-- legend -->
+    <rect x="155" y="240" width="16" height="10" rx="2" fill="var(--surface2)" stroke="var(--accent)" stroke-width="1.4"/>
+    <text x="176" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Planned</text>
+    <rect x="245" y="240" width="16" height="10" rx="2" fill="var(--done-mark)"/>
+    <text x="266" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Actual (done)</text>
+    <rect x="370" y="240" width="16" height="10" rx="2" fill="var(--warn)"/>
+    <text x="391" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Over plan</text>
+    <line x1="470" y1="245" x2="490" y2="245" stroke="var(--text2)" stroke-width="1.4" stroke-dasharray="3 3"/>
+    <text x="495" y="249" font-family="var(--sans)" font-size="9.5" fill="var(--text2)">Today</text>
+  </svg>
+  <p class="cap">Planned schedule (hollow) vs. actual (solid). Bootstrap ran ~1 day over &mdash; the Portico
+  ABI/toolchain work &mdash; and the rest remains on plan. Update the solid bars as each phase completes.</p>
+
+  <div class="note ok">
+    <span class="lbl">Progress &mdash; M0 essentially complete (Sep 2)</span>
+    <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored and
+    building; a CMake-built C++ federate that creates and joins a federation; ADRs&nbsp;0012&ndash;0014; baseline
+    committed. <strong>In flight:</strong> M1 RTI handshake (hand-authored FOM, pub/sub, lifecycle).
+    <strong>M0 tail still open:</strong> CI on an empty build, the Kanban board, a proper session journal, and
+    decomposing the schedule into tracked issues.
+  </div>
+
   <h3>Checkpoints and fallbacks &mdash; decide at these, don&rsquo;t drift past them</h3>
   <div class="chk"><b>End of Sep 4 &mdash;</b> if two federates aren&rsquo;t exchanging an attribute yet,
   you&rsquo;re behind on the hardest infrastructure. Stop adding scope; get the handshake working before anything
@@ -1141,27 +1206,28 @@ const ROADMAP_DATA = {
   principle: "One validated model core, wrapped by many drivers. Consume the middleware; own your own physics; report distributions, not single runs.",
   milestones: [
     {
-      id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "next",
-      blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added.",
+      id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "active",
+      blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added. Mostly done as of Sep 2 \u2014 the container, vendored RTI, and CMake build all land; CI/board/journal are the remaining tail.",
       children: [
-        { label: "Repo, licence, .gitignore" },
+        { label: "Repo, licence, .gitignore", status: "done" },
         { label: "Board: 6 columns, WIP limit 2" },
-        { label: "docs/adr/ seeded with the 13-ADR set" },
+        { label: "docs/adr/ seeded (0000\u20130014)", status: "done" },
         { label: "docs/journal.md" },
-        { label: "CMake skeleton + CI on empty target" },
-        { label: "RTI installed, shipped examples run" },
-        { label: "Container + netem scaffolding sketched" },
-        { label: "Whole month decomposed into sized issues" }
+        { label: "Portico 2.1.0 vendored; C++ federate builds & runs", status: "done" },
+        { label: "CMake build (federate compiles + runs)", status: "done" },
+        { label: "CI green on an empty build" },
+        { label: "Container + netem scaffolding sketched", status: "done" },
+        { label: "Month decomposed into sized issues" }
       ],
       stamps: [
         "Board populated with the full month of issues",
         "CI green on an empty build",
-        "Vendor example federates run locally",
-        "ADR-0001 (RTI) and ADR-0002 (public repo) accepted"
+        "Vendor example federates run locally \u2014 done (via our own CMake build)",
+        "ADR-0001 (RTI) and ADR-0002 (public repo) accepted \u2014 done"
       ]
     },
     {
-      id: "M1", codename: "Handshake", title: "RTI Bring-up \u2014 Week 1", status: "planned",
+      id: "M1", codename: "Handshake", title: "RTI Bring-up \u2014 Week 1", status: "next",
       blurb: "Learn the interface against a model too trivial to be the cause of a bug. Everything here is about the RTI; nothing is about physics.",
       children: [
         { label: "Author the FOM by hand" },

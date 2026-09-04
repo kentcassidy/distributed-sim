@@ -1,6 +1,6 @@
 # ADR-0002: Public Repository From the First Commit
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

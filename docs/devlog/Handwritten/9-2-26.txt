@@ -27,3 +27,18 @@ Metabuild: CMake
 Build: Ninja is Make alternative
 |
 Compiles .cpp to .o
+!!!
+9:06 PM the full example build is solid.
+!!!
+The repo is self contained:
+ - docker compose build
+	--> builds image from Dockerfile
+ - docker compose run --rm dev
+	--> runs container that will remove itself on exit
+	--> auto-extracts portico.tar.gz to /opt/portico
+	--> sets ENV variables
+	--> mounts source code volumes to host
+(- cmake -S /mnt -B /mnt/build -G Ninja
+	--> one-time setup from source folder)
+ - cmake --build /mnt/build
+	--> creates binary executable. Currently configured to run the example Portico federation

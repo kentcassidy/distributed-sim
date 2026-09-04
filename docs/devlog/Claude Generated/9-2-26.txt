@@ -1,0 +1,44 @@
+Devlog — 2026-09-02  (M0 Bootstrap)
+
+Technical log (facts; add personal reflection as you like):
+
+- Container: reproducible Ubuntu 22.04 + GCC 11 dev image (ADR-0012). The
+  Dockerfile builds it from a recipe; retired the earlier hand-made
+  `docker commit` image. Repo mounted into the container for edit-on-host,
+  build-in-container.
+
+- RTI: vendored the Portico 2.1.0 linux64 release in third_party/
+  (sha256 55eaffc11e08e1ad4...416188, ~80 MB, tracked in git). Portico is
+  self-contained — bundles its own JRE (Java 1.8.0_66) at $RTI_HOME/jre — so no
+  system JDK is installed. Portico 2.2.x has no downloadable binary (GitHub
+  source only, no JRE), so 2.1.0 it is.
+
+- Build contract (from the shipped C++ example, authoritative for 2.1.0):
+    include: $RTI_HOME/include/ieee1516e   (dir is ieee1516e, not hla1516e)
+    libs:    -lrti1516e64 -lfedtime1516e64  (in lib/gcc4)  + -ljvm -ljsig
+    define:  -DRTI_USES_STD_FSTREAM
+    runtime: LD_LIBRARY_PATH = lib/gcc4 : jre/lib/amd64/server  (Java-8 layout)
+
+- Two compat findings on GCC 11, both recorded in ADR-0014:
+    * C++ standard — 2.1.0 headers use throw()-specs / std::auto_ptr, removed in
+      C++17. RTI-facing code compiles as gnu++14. (Physics core can still be C++17.)
+    * C++ ABI — the gcc4 libs use the pre-C++11 std::string ABI. Symptom: clean
+      compile + link, then SIGSEGV in the std::wstring copy ctor at runtime.
+      Fix: build the whole project with -D_GLIBCXX_USE_CXX11_ABI=0.
+
+- CMake: root CMakeLists.txt with a reusable Portico::Portico INTERFACE target
+  carrying the whole contract; example_federate builds and runs; the example FOM
+  (testfom.fed) is staged next to the binary via a POST_BUILD copy.
+
+- End-to-end works: docker compose build -> cmake -S/-B -> cmake --build ->
+  ./example_federate  creates and joins a federation (sync point announced).
+  Baseline committed.
+
+- ADRs 0001-0004 promoted Proposed -> Accepted (their resolve-by was M0).
+
+- M0 tail still open: CI on an empty build, GitHub Projects board (6 cols, WIP 2),
+  a proper docs/journal.md, and decomposing the 13-day plan into tracked issues.
+
+Next: M1 RTI handshake — hand-author our own FOM, write a publisher + subscriber
+federate pair, wire ambassador callbacks and the full lifecycle. In parallel,
+start the RTI-free model core.
