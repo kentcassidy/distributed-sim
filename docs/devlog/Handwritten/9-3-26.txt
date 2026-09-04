@@ -1,0 +1,101 @@
+How to partition federates?
+
+Entity-partition vs Space-partition
+
+Originally I thought each plane would be assigned a federate or processing entity. But...
+If I ever want collisions to occur between objects, the federate line must be drawn elsewhere.
+
+
+
+Message Bus
+ 	-- Common communication schema
+Message Broker
+	-- Auto distributes or relays. Router and/or load balancer, API gateway
+
+Publish/Subscribe model
+
+List-based pub/sub
+	--> identify a subject and maintain a list of subscribers
+	--> when events occur, the subject notifies each
+	--> Assuming push model:
+		- Attach()
+		- Detach()
+		- Notify()
+		- Update() -- observer method
+	-- Design Patterns: Elements of Reusable Object-Oriented Software [Gamma95] "Observer" pattern
+
+
+Broadcast-based pub/sub
+	--> event publisher broadcasts message to LAN
+	--> listening nodes inspects subject to either receive or ignore
+	-- Enterprise Integration Patterns: Designing, Building, and Deploying Messaging Solutions [Hohpe04] "publish/subscribe channel with reactive filtering"
+
+
+Content-based pub/sub
+	--> as opposed to the above two, which can be "topic-based"
+	-- In a topic-based system, processes exchange information through a set of predefined subjects (topics) which represent many-to-many distinct (and fixed) logical channels. Content-based systems are more flexible as subscriptions are related to specific information content and, therefore, each combination of information items can actually be seen as a single dynamic logical channel. This exponential enlargement of potential logical channels has changed the way to implement a pub/sub system. [Baldoni03]
+
+
+How shall I structure the OOP inheritance and ownership?
+
+AFSIM (Boeing / AFRL) WsfPlatform has-a mover, has-a sensors, has-a processors -- composition.
+In games, data lives in component arrays, behavior lives in systems.
+	--> lots of small polymorphic interfaces
+Where I will have it:
+1) FederateAmbassador : NullFederate Ambassador, overriding discoverObjectInstance, reflectAttributeValues, timeAdvanceGrant
+2) DynamicsModel as base with LinearLongitudinal implementing it
+3) Integrator - RK4 vs Euler interchangeable
+4) Entity - one-level abstract base, only add it when I have a second entity type (missiles, later)
+
+
+C++:
+virtual function expects to be overwritten at inheritance
+abstract function must be overwritten at inheritance
+
+"is-a" relationship describes child "is-a" specialized parent
+
+
+Setting up a GitHub Actions:
+.github/workflows/CI.yml
+
+
+
+
+==================================================================================================
+DIRECT CLASSES THAT ARE APPLICABLE
+Classical Physics:
+ - 9A - Classical Mechanics
+ - 9B - Waves and Thermodynamics
+ - 9C - Electricity and Magnetism
+ - 9D - Relativity and Quantum Mechanics
+Calculus:
+ - 21A
+ - 21B
+ - 21C
+ - 21D
+ - 22A Multivariable Calculus and Linear Algebra
+ - 22B Differential Equations
+
+Programming: (Over 4 years of courses)
+ - Programming and Problem Solving: C
+ - Engineering Problem Solving: MATLAB
+ - Object Oriented Programming: C++
+ - Digital Systems I: Verilog
+ - Intro to Computer Architecture: RISCV and x86 Assembly
+ - Digital Systems II: Verilog / System Verilog
+ - Algorithm Design and Analysis: C++
+ - Database Systems: C++
+ - Computer Networks: C++, Python
+ - Digital Systems Design Project: C, Verilog, Python, JavaScript
+ - Computer Security: C++
+ - Embedded Systems: Embedded C
+ - Artificial Intelligence: Python
+
+Theory:
+ - Discrete Math for CS
+ - Linear Algebra + Lab: MATLAB
+ - Vector Analysis
+ - Probabilistic Analysis
+
+
+

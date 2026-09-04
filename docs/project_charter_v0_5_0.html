@@ -397,12 +397,13 @@ td code{font-size:11.5px}
   ABI/toolchain work &mdash; and the rest remains on plan. Update the solid bars as each phase completes.</p>
 
   <div class="note ok">
-    <span class="lbl">Progress &mdash; M0 essentially complete (Sep 2)</span>
+    <span class="lbl">Progress &mdash; M0 essentially complete (Sep 3)</span>
     <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored and
-    building; a CMake-built C++ federate that creates and joins a federation; ADRs&nbsp;0012&ndash;0014; baseline
-    committed. <strong>In flight:</strong> M1 RTI handshake (hand-authored FOM, pub/sub, lifecycle).
-    <strong>M0 tail still open:</strong> CI on an empty build, the Kanban board, a proper session journal, and
-    decomposing the schedule into tracked issues.
+    building; a CMake-built C++ federate that creates and joins a federation; the <code>src/</code> skeleton
+    (<code>dff_core</code> + <code>aircraft_federate</code> + <code>controller</code>, green build graph);
+    ADRs&nbsp;0012&ndash;0015; baseline committed. <strong>In flight:</strong> M1 RTI handshake (hand-authored
+    FOM, pub/sub, lifecycle). <strong>M0 tail still open:</strong> CI on an empty build, the Kanban board, and
+    decomposing the schedule into tracked issues (the session journal lives in <code>docs/devlog/</code>).
   </div>
 
   <h3>Checkpoints and fallbacks &mdash; decide at these, don&rsquo;t drift past them</h3>
@@ -1207,12 +1208,12 @@ const ROADMAP_DATA = {
   milestones: [
     {
       id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "active",
-      blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added. Mostly done as of Sep 2 \u2014 the container, vendored RTI, and CMake build all land; CI/board/journal are the remaining tail.",
+      blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added. Mostly done as of Sep 3 \u2014 the container, vendored RTI, CMake build, and src/ skeleton all land; CI, board, and issue-decomposition are the remaining tail (the session journal lives in docs/devlog/).",
       children: [
         { label: "Repo, licence, .gitignore", status: "done" },
         { label: "Board: 6 columns, WIP limit 2" },
-        { label: "docs/adr/ seeded (0000\u20130014)", status: "done" },
-        { label: "docs/journal.md" },
+        { label: "docs/adr/ seeded (0000\u20130015)", status: "done" },
+        { label: "Session journal (docs/devlog/)", status: "done" },
         { label: "Portico 2.1.0 vendored; C++ federate builds & runs", status: "done" },
         { label: "CMake build (federate compiles + runs)", status: "done" },
         { label: "CI green on an empty build" },
@@ -1280,19 +1281,20 @@ const ROADMAP_DATA = {
     },
     {
       id: "M4", codename: "Worldspace", title: "Federated Driver \u2014 Weeks 2\u20133", status: "planned",
-      blurb: "The distributed mode over the same core. Two owned aircraft, ghosts, dead reckoning, time management. Needs M1 and M2. The milestone most likely to overrun \u2014 protect it; take slack from M2/M3.",
+      blurb: "The distributed mode over the same core, space-partitioned (ADR-0015): each federate owns a sector; a controller federate assigns sectors from config; aircraft migrate across seams. Ghosts, halo bands, dead reckoning, time management. Needs M1 and M2. The milestone most likely to overrun \u2014 protect it; take slack from M2/M3.",
       children: [
-        { label: "Wrap the core as two aircraft federates" },
-        { label: "Ghosts + discovery of remote entities" },
+        { label: "Controller federate assigns sectors from config" },
+        { label: "Each federate owns a sector; simulates aircraft inside it" },
+        { label: "Ghosts + discovery; halo band across seams" },
+        { label: "Handoff on sector crossing (ownership transfer)" },
         { label: "Dead reckoning: receiver extrapolation" },
-        { label: "Dead reckoning: sender mirror + threshold" },
-        { label: "Time regulating + constrained on both ships" },
+        { label: "Time regulating + constrained on all federates" },
         { label: "Logger constrained only; truth + ghost to CSV" },
         { label: "Induce, document, resolve a lookahead deadlock" }
       ],
       stamps: [
-        "Both aircraft integrate locally; neither computes the other's physics",
-        "Federated run matches a batch run at zero impairment (core is driver-agnostic)",
+        "A co-located run and a sector-split run match at zero impairment (partition invariance)",
+        "Aircraft hand off across seams without perturbing the trajectory",
         "The deadlock and its resolution are written up"
       ]
     },
