@@ -1,5 +1,6 @@
-#include "dff_core.hpp0"
+#include "AircraftFederate.hpp"
 
+#if 0
 void AircraftFederate::run() {
 	join();
         while(t < t_end) {
@@ -12,5 +13,5 @@ void AircraftFederate::run() {
             t += dt;
         }
 }
-        
+#endif        
 

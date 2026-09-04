@@ -19,11 +19,23 @@
 // Right now this stub just proves the wiring: it links Portico and dff_core and
 // runs, so the build graph is green before any real logic exists.
 // ─────────────────────────────────────────────────────────────────────────────
+#include "AircraftFederate.hpp"
 #include <iostream>
 
-#include "dff_core.hpp"
+int main(int argc, char** argv) {
+	#if 0
+	try {
+		dff::AircraftFederate fed(argc > 1 ? argv[1] : "config/scenario.example.json");
+		fed.run();
+	} catch (const std::exception& e) {
+		std::cerr << "fatal: " << e.what() << "\n";
+		return 1;
+	}
+	return 0;
+	#endif
 
-int main() {
+
+
     std::cout << "aircraft_federate skeleton — linked against "
               << dff::core_version() << "\n";
     std::cout << "TODO(M1): join federation, pub/sub the FOM, ownership, "

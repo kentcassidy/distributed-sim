@@ -53,13 +53,14 @@ virtual function expects to be overwritten at inheritance
 abstract function must be overwritten at inheritance
 
 "is-a" relationship describes child "is-a" specialized parent
-
+vs "has-a" seems to use/inherit from ownership of another class
 
 Setting up a GitHub Actions:
 .github/workflows/CI.yml
 
+Also the Kanban board is saturated with the near-term tasks. I want to practice creating and labeling to the near-atomicity that I do with commits. Sort of like comprehensive work tickets we used in ServiceNow. I guess looking at the chart later will give me that dopamine and guidance, I hope not to be overwhelmed by myself.
 
-
+TIL #if 0, #endif can block functions from being processed by compiler. I guess the macro is a simple if false, makes sense.
 
 ==================================================================================================
 DIRECT CLASSES THAT ARE APPLICABLE

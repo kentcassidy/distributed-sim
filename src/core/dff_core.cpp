@@ -19,6 +19,7 @@ using AircraftParams = double;       // Alias to a standard double
 struct DynamicsModel; 
 */
 
+#if 0
 class Sector {
     double xmin;
     double xmax;
@@ -37,7 +38,6 @@ public:
     }
 };
 
-
 class DynamicsModel {
 public:
         virtual ~DynamicsModel() = default;
@@ -53,3 +53,4 @@ class Aircraft {
 public:
     void advance(double dt);
 };
+#endif
