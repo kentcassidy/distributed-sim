@@ -14,8 +14,9 @@ project(dff
 # / std::wstring ABI. Everything we build must match, or a std::string crossing
 # the boundary between our .o files (or into Portico) crashes at runtime in the
 # string copy constructor. This define is global on purpose — the ABI is a
-# whole-program property, NOT a per-file choice. It does not limit which C++
-# standard any target uses.
+# whole-program property, NOT a per-file choice. It applies to every target
+# added below (dff_core included), and it does not limit which C++ standard a
+# target uses.
 # ─────────────────────────────────────────────────────────────────────────────
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
@@ -49,34 +50,19 @@ target_link_libraries(portico INTERFACE
 add_library(Portico::Portico ALIAS portico)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# First federate target.
-# RTI-facing → must be gnu++14 (see ADR / Portico 2.1.0 headers). CXX_EXTENSIONS
-# ON gives gnu++14 rather than strict c++14, matching the example's environment.
-# Replace/extend these sources as the real federates take shape (M1+).
+# Subprojects. Order matters: dff_core is RTI-free and is linked by both the
+# aircraft federate and the controller, so it is added first.
+#
+#   src/core        dff_core           — the model. C++17, MUST NOT touch Portico.
+#   src/federate    aircraft_federate  — RTI-facing sim process. gnu++14.
+#   src/controller  controller         — sector-assignment federate. gnu++14.
+#   examples/…      example_federate   — Portico's shipped demo, kept green as
+#                                        the toolchain proof (not part of DFF).
+#
+# The standard split (C++17 core vs gnu++14 RTI code) lives per-target inside
+# each subdirectory's CMakeLists.txt; the ABI define above is shared by all.
 # ─────────────────────────────────────────────────────────────────────────────
-add_executable(example_federate
-    src/federate/main.cpp
-    src/federate/ExampleCPPFederate.cpp
-    src/federate/ExampleFedAmb.cpp)
-
-add_custom_command(TARGET example_federate POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/federate/testfom.fed"
-        "$<TARGET_FILE_DIR:example_federate>")
-
-target_link_libraries(example_federate PRIVATE Portico::Portico)
-
-set_target_properties(example_federate PROPERTIES
-    CXX_STANDARD          14
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS        ON)              # ON → -std=gnu++14
-
-# Cosmetic: silence the "dynamic exception specifications are deprecated" noise
-# from Portico's headers. -Wno-deprecated is the correct category (not
-# -Wno-deprecated-declarations). Real errors are unaffected.
-target_compile_options(example_federate PRIVATE -Wno-deprecated)
-
-# ── Later: your physics core, RTI-free, can be full C++17 ────────────────────
-# add_library(dff_core STATIC src/core/aircraft.cpp ...)
-# target_compile_features(dff_core PUBLIC cxx_std_17)   # 17 is fine here
-# target_link_libraries(example_federate PRIVATE dff_core)
+add_subdirectory(src/core)
+add_subdirectory(src/federate)
+add_subdirectory(src/controller)
+add_subdirectory(examples/portico-example)
