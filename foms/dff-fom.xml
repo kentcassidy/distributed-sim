@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- Identification / documentation for Portico parsing -->
+    <modelIdentification>
+        <name>Distributed Flight-Dynamics FOM</name>
+        <type>FOM</type>
+        <version>0.1</version>
+        <modificationDate>2026-09-05</modificationDate>
+        <securityClassification>Unclassified</securityClassification>
+        <purpose>Aircraft entity-state exchange for the DFF federation</purpose>
+        <applicationDomain>Distributed flight-dynamics simulation</applicationDomain>
+    </modelIdentification>
+
+    <objects>
+        <!-- Everything descents from the predefined HLAobjectRoot. Never redeclare or its previlegeToDelete attribute; rather nest under it . -->
+        <objectClass name="HLAobjectRoot">
+            <objectClass name="Aircraft">
+                <sharing>PublishSubscribe</sharing>
+
+                <!-- Identity + intertial properties: Static = sent once at registration,
+                    never updated. EntityId ties the HLA instance to a C++ Aircraft.   -->
+                <attribute>
+                    <name>EntityId</name>
+                    <dataType>HLAinteger32BE</dataType>
+                    <updateType>Static</updateType>
+                    <updateCondition>NA</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Receive</order>
+                </attribute>
+                <attribute>
+                    <name>Mass</name>
+                    <dataType>HLAfloat64BE</dataType>
+                    <updateType>Static</updateType>
+                    <updateCondition>NA</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Receive</order>
+                </attribute>
+                <attribute>
+                    <name>Radius</name>
+                    <dataType>HLAfloat64BE</dataType>
+                    <updateType>Static</updateType>
+                    <updateCondition>NA</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Receive</order>
+                </attribute>
+                
+                <!-- Kinematic state: Periodic (sent each step / on DR threshold)m
+                    TimeStamp order so conservative time management can order them.
+                    Position is the only one wired for today's (9/5) handshake.    -->
+                <attribute>
+                    <name>Position</name>
+                    <dataType>Vector3D</dataType>
+                    <updateType>Periodic</updateType>
+                    <updateCondition>On advance</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Timestamp</order>
+                </attribute>
+                <attribute>
+                    <name>Velocity</name>
+                    <dataType>Vector3D</dataType>
+                    <updateType>Periodic</updateType>
+                    <updateCondition>On advance</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Timestamp</order>
+                </attribute>
+                <attribute>
+                    <name>Orientation</name>
+                    <dataType>Quaternion</dataType>
+                    <updateType>Periodic</updateType>
+                    <updateCondition>On advance</updateCondition>
+                    <ownership>NoTransfer</ownership>
+                    <sharing>PublishSubscribe</sharing>
+                    <transportation>HLAreliable</transportation>
+                    <order>Timestamp</order>
+                </attribute>
+            </objectClass>
+        </objectClass>
+    </objects>
+
+    <!-- No custom interactions yet; the root must still be present. -->
+    <interactions>
+        <interactionClass name="HLAinteractionRoot"/>
+    </interactions>
+
+    <!-- Custom datatypes. HLAfloat64BE / HLAinteger32BE are predefined from the standard MIM. -->
+    <dataTypes>
+        <arrayDataTypes>
+            <arrayData>
+                <name>Vector3D</name>
+                <dataType>HLAfloat64BE</dataType>
+                <cardinality>3</cardinality>
+                <encoding>HLAfixedArray</encoding>
+            </arrayData>
+            <arrayData>
+                <name>Quaternion</name>
+                <dataType>HLAfloat64BE</dataType>
+                <cardinality>4</cardinality>
+                <encoding>HLAfixedArray</encoding>
+            </arrayData>
+        </arrayDataTypes>
+    </dataTypes>
+
+</objectModel>
