@@ -15,8 +15,9 @@ struct Vec3 {
         : x(nx), y(ny), z(nz) {}
     
     Vec3(const Vec3& other) = default;
+    ~Vec3() = default; // not sure if needed at all if this stays on stack
 
-    Vec3& operator=(const Quaternion& other) = default;
+    Vec3& operator=(const Quat& other) = default; // This might give compilation error based on placement?? I do wonder how this potentially circular declaration goes, as Quat uses Vec3
 
     // --- Compound assignment operators ---
     Vec3& operator+=(const Vec3& other) {
@@ -48,8 +49,6 @@ struct Vec3 {
     Vec3 operator-() const {
         return {-x, -y, -z};
     }
-
-    // missing constructor? or it's self explanatory? I ask this because my reference offered a constructor for Quaternion and I'm wondering if it's only because I'm using a union.
 }
 // --- Binary Arithmetic Operators ---
 inline Vec3 operator+(Vec3 lhs, const Vec3& rhs) {
@@ -103,21 +102,22 @@ struct Quat {
     */
 
     // --- Constructors ---
-    Quaternion() : x(0.0), y(0.0), z(0.0), w(1.0) {}
+    Quat() : x(0.0), y(0.0), z(0.0), w(1.0) {}
     
-    Quaternion(double nx, double ny, double nz, double nw)
+    Quat(double nx, double ny, double nz, double nw)
         : x(nx), y(ny), z(nz), w(nw) {}
     
-    Quaternion(const Vec3& v, double nw)
+    Quat(const Vec3& v, double nw)
         : vec(v), w(nw) {}
 
-    Quaternion(const Quaternion& other) = default;
+    Quat(const Quat& other) = default;
+    ~Quat() = default;
 
-    Quaternion& operator=(const Quaternion& other) = default;
+    Quat& operator=(const Quat& other) = default;
         
     // --- Quaternion Multiplication Assignment (Combining Rotations) ---
     // Note: Quaternion multiplication is NOT commutative. Q1 *= Q2 means apply rotation Q1, then Q2 in order
-    Quaternion& operator*=(const Quaternion& q) {
+    Quat& operator*=(const Quat& q) {
         float ow = w, ox = x, oy = y, oz = z;
         
         w = ow * q.w  -  ox * q.x  -  oy * q.y  -  oz*q.z;
@@ -130,13 +130,13 @@ struct Quat {
 };
 
 // --- Binary Multiplication Operator ---
-inline Quaternion operator*(Quaternion lhs, const Quaternion& rhs) {
+inline Quat operator*(Quat lhs, const Quat& rhs) {
     return lhs *= rhs;
 }
 
-// --- Vector Rotation Operator (Quaternion * Vec3) ----
+// --- Vector Rotation Operator (Quat * Vec3) ----
 // This rotates a 3D point or direction vector by the quaternion's orientation.
-inline Vec3 operator*(const Quaternion& q, const Vec3& v) {
+inline Vec3 operator*(const Quat& q, const Vec3& v) {
     // Optimized standard formula: v' = v + 2 * q.xyz x (q.xyz x v + q.w * v)
     Vec3 w_t = q.w * cross(q.vec, v) * 2.0;
     Vec3 cross_q_t = cross(q.vec, t);
