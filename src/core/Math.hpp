@@ -1,4 +1,3 @@
-// Ready for review by Claude.
 #pragma once
 #include <iostream>
 #include <cmath>
@@ -14,11 +13,6 @@ struct Vec3 {
     Vec3(double nx, double ny, double nz)
         : x(nx), y(ny), z(nz) {}
     
-    Vec3(const Vec3& other) = default;
-    ~Vec3() = default; // not sure if needed at all if this stays on stack
-
-    Vec3& operator=(const Quat& other) = default; // This might give compilation error based on placement?? I do wonder how this potentially circular declaration goes, as Quat uses Vec3
-
     // --- Compound assignment operators ---
     Vec3& operator+=(const Vec3& other) {
         x += other.x;
@@ -38,18 +32,18 @@ struct Vec3 {
         z *= scalar;
         return *this;
     }
-    Vec3& operator/=(double other) {
+    Vec3& operator/=(double scalar) {
         // assuming scalar is not 0
         double inv = 1.0 / scalar;
-        x *= scalar;
-        y *= scalar;
-        z *= scalar;
+        x *= inv;
+        y *= inv;
+        z *= inv;
         return *this;
     }
     Vec3 operator-() const {
         return {-x, -y, -z};
     }
-}
+};
 // --- Binary Arithmetic Operators ---
 inline Vec3 operator+(Vec3 lhs, const Vec3& rhs) {
     return lhs += rhs; // reuses operator
@@ -82,24 +76,12 @@ inline double dot(const Vec3& a, const Vec3& b) {
 }
 
 struct Quat {
-    union {
-        struct {
-            double x = 0.0;
-            double y = 0.0;
-            double z = 0.0;
-        };
-        
-        Vec3 vec;
-    };
-    
-    double w = 1.0; // Default constructor yields an Identity Quaternion (zero rotation)
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;  
+    double w = 1.0;
 
-    // Allegedly Standard ISO C++17 way to get x, y, z accessors without compiler extensions. I would like elaboration please...
-    /*
-    double& x;
-    double& y;
-    double& z;
-    */
+    Vec3 vec() const { return {x, y, z}; }
 
     // --- Constructors ---
     Quat() : x(0.0), y(0.0), z(0.0), w(1.0) {}
@@ -118,7 +100,7 @@ struct Quat {
     // --- Quaternion Multiplication Assignment (Combining Rotations) ---
     // Note: Quaternion multiplication is NOT commutative. Q1 *= Q2 means apply rotation Q1, then Q2 in order
     Quat& operator*=(const Quat& q) {
-        float ow = w, ox = x, oy = y, oz = z;
+        double ow = w, ox = x, oy = y, oz = z;
         
         w = ow * q.w  -  ox * q.x  -  oy * q.y  -  oz*q.z;
         x = ow * q.x  +  ox * q.w  +  oy * q.z  -  oz*q.y;
@@ -138,8 +120,6 @@ inline Quat operator*(Quat lhs, const Quat& rhs) {
 // This rotates a 3D point or direction vector by the quaternion's orientation.
 inline Vec3 operator*(const Quat& q, const Vec3& v) {
     // Optimized standard formula: v' = v + 2 * q.xyz x (q.xyz x v + q.w * v)
-    Vec3 w_t = q.w * cross(q.vec, v) * 2.0;
-    Vec3 cross_q_t = cross(q.vec, t);
-
-    return v + w_t + cross_q_t;
+    Vec3 t = 2.0 * cross(q.vec(), v);
+    return v + q.w * t + cross(q.vec(), t);
 }

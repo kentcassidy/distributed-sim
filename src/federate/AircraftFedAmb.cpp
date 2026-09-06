@@ -18,32 +18,7 @@ AircraftFedAmb::AircraftFedAmb() {
     this->isReadyToRun      = false;
 }
 
-AircraftFedAmb::~AircraftFedAmb() {} // was using override here because example had throw()... removal was proper?
-
-GhostRecord::GhostRecord(const std::wstring theObjectName, 
-                        ) {
-    this->name = theObjectName; // Wondering, does a string copy work like this? I remember strncpy was necessary in C or it's lost
-    this->id = 0;
-    //this->state.position already initialized to 0.0s
-}
-
-////////////////////
-// Instance methods
-//////////
-// perhaps this helper should be placed into Encoding? Thoughts?
-double AircraftFedAmb::convertTime(const LogicalTime& theTime) { // I would like some assistance understanding this, copied from example. I glanced online to see this dynamic_cast isn't recommended?
-    const HLAfloat64Time& castTime = dynamic_cast<const HLAfloat64Time&>(theTime);
-    return castTime.getTime();
-}
-
-////////////////////
-// Time Callbacks
-//////////
-// The example uses the word Callback, and you have used it many times as well. What does this really mean? Fundamentally, simply...
-void timeAdvanceGrant(const LogicalTime& theFederateTime) {
-    this->isAdvancing = false;
-    this->federateTime = convertTime(theFederateTime);
-}
+AircraftFedAmb::~AircraftFedAmb() throw() {}
 
 ////////////////////
 // Object Management Callbacks
@@ -51,30 +26,15 @@ void timeAdvanceGrant(const LogicalTime& theFederateTime) {
 // discover object methods
 void AircraftFedAmb::discoverObjectInstance(ObjectInstanceHandle theObject,
                                             ObjectClassHandle theObjectClass,
-                                            const std::wrtring& theObjectName) {
-    // Called when a NEW remote Aircraft is registered by another federate.
-    wcout << L"Discovered Object: handle=" << theObject
-        << L", classHandle=" << theObjectClass
-        << L", name=" << theObjectName << endl;
-}
-// Still not sure if this set of functions counts as an "update" or one time initializer... This would greatly change how this is implemented. 
-void AircraftFedAmb::discoverObjectInstance(ObjectInstanceHandle theObject,
-                                            ObjectClassHandle theObjectClass,
-                                            const std::wstring& theObjectName,
-                                            FederateHandle producingFederate) {
+                                            const std::wstring& theObjectName) {
     // Called when a New remote Aircraft is registered by another federate.
     wcout << L"Discovered Object: handle=" << theObject
         << L", classHandle=" << theObjectClass
-        << L", name=" << theObjectName
-        << L", createdBy=" << producingFederate << endl;
-    this->ghostRecordList.emplace(theObject, GhostRecord(theObjectName));
+        << L", name=" << theObjectName << endl;
+    this->ghosts[theObject].name = theObjectName;
 }
 
 /* TODO
-    OVERRIDE discoverObjectInstance(theObject, theClass, objectName):
-      // Called when a NEW remote Aircraft is registered by another federate.
-      create an empty GhostRecord, insert into the map keyed by theObject
-      log "discovered <objectName>"
 
     OVERRIDE reflectAttributeValues(theObject, theAttributeValues, tag, ...):
       // Called when a subscribed attribute we care about is updated remotely.
