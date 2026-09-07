@@ -1,0 +1,71 @@
+DEVLOG — 2026-09-07 (Claude-generated session log)
+====================================================
+
+Focus: land the M1 RTI handshake; recover bearings after the slip.
+
+WHAT HAPPENED
+-------------
+1. M1 RTI handshake works (single-federate lifecycle verified end to end).
+   - Federate: connect (HLA_EVOKED) -> create/join (idempotent) -> resolve+cache
+     handles -> publish+subscribe Aircraft.Position -> register own object ->
+     loop{ encode+update Position; evokeMultipleCallbacks } -> delete/resign/
+     destroy/disconnect. Clean run, valid handles, no exceptions.
+   - Files populated to get here: Encoding.{hpp,cpp} (Vec3 <-> HLAfixedArray of
+     3x HLAfloat64BE), AircraftFederate.{hpp,cpp}, main.cpp (thin launcher),
+     AircraftFedAmb.cpp (discover + reflect + time callbacks defined so the
+     vtable resolves). Math.hpp/State.hpp cleaned (Quat accessor, wostream op).
+
+2. Two compile/runtime hurdles, both resolved:
+   - VariableLengthData incomplete-type: the encoding headers only forward-declare
+     it; added #include <RTI/VariableLengthData.h> (returned by value from encode).
+   - FOM would not load its attributes as 1516e XML: getAttributeHandle returned
+     an invalid [-1] handle and publishObjectClassAttributes failed. Root-causing
+     Portico 2.1.0's XML DIF parser was deprioritised OUT against the deadline.
+
+3. FOM re-authored in HLA 1.3 (.fed) form -> ADR-0017 (Accepted).
+   - .fed carries NO datatypes (attributes are opaque byte buffers, which is what
+     Encoding.cpp already produces) and is the format the vendored C++ example is
+     proven against. Root object class is ObjectRoot (not HLAobjectRoot). Handles
+     came back valid immediately; publish/lifecycle green.
+   - The 1516e XML FOM is retained in-tree (foms/dff-fom.xml) as the eventual
+     deliverable; the interface remains IEEE 1516e (ADR-0001 unaffected) — only
+     the FOM serialization changed. Migrating back is now a contained task.
+
+4. Two-federate run exposed a missing start barrier (NOT yet a passing exchange).
+   - Symptoms the user caught: both federates print "created fresh" (Portico
+     JGroups create isn't atomic; they converge onto one shared federation);
+     neither printed discover/reflect (short, unsynchronized loops never
+     overlapped); both show own-object handle=2 (per-federate local numbering).
+   - Added a waitForUser() barrier (gated behind an interactive arg so CI's
+     non-interactive smoke run doesn't block) + longer loop, so the publish
+     windows overlap. Two-federate cross-exchange is the immediate next check.
+   - Correct long-term fix noted: adopt HLA SYNCHRONIZATION POINTS (register /
+     announce / achieve / federationSynchronized) — the RTI's native barrier,
+     which sidesteps Two-Generals via reliable transport + a central coordinator.
+     Belongs in the time-management milestone (deterministic coordinated start is
+     a prerequisite for partition invariance anyway).
+
+DOC SYNC
+--------
+- ADR-0017 added (FOM in .fed, Accepted). ADRs 0006 (core/driver split), 0007
+  (formation is the MVP coupling; collision post-MVP), 0011 (constructive scope)
+  promoted Proposed -> Accepted. README index updated.
+- Charter: progress note refreshed (M1 done, M2 next); timeline v3 "Re-forecast"
+  (Sep 7) added — collision off the MVP critical path, remaining milestones
+  resequenced Flight model -> Time mgmt+sync -> Formation+delay -> V&V -> Package;
+  STATUS advanced (Bootstrap + RTI handshake done, Flight model active).
+
+OPEN / NEXT
+-----------
+- IMMEDIATE: run two federates with the barrier and confirm discover/reflect
+  actually cross (closes M1 verification). Watch whether the discovered REMOTE
+  handle differs from the local "2" (expected; confirms no ghost-map collision).
+- M2: flight model in dff_core (RK4 + linearized longitudinal), eigenvalue check
+  vs published short-period/phugoid modes, then replace the federate's dummy
+  step() with world.advance(dt) + publish of real State.
+- DECISION TO SURFACE: with collision deferred, is space-partition (sectors +
+  halo + controller, ADR-0015) still needed for the MVP formation demo, or does
+  the simpler entity-partition (ADR-0013) suffice for co-located-vs-split? This
+  materially changes the remaining scope and the GitHub roadmap.
+- Behind schedule by ~2 days; v3 re-forecast holds the Sep 13 deadline only with
+  collision cut to post-MVP.

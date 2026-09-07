@@ -63,6 +63,10 @@ inline Vec3 operator/(Vec3 lhs, double scalar) {
 inline std::ostream& operator<<(std::ostream& os, const Vec3& v) {
     return os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
 }
+// Wide-stream twin, for the RTI layer (all Portico I/O is wcout / wstring).
+inline std::wostream& operator<<(std::wostream& os, const Vec3& v) {
+    return os << L"(" << v.x << L", " << v.y << L", " << v.z << L")";
+}
 
 inline Vec3 cross(const Vec3& a, const Vec3& b) {
     return {
@@ -90,7 +94,7 @@ struct Quat {
         : x(nx), y(ny), z(nz), w(nw) {}
     
     Quat(const Vec3& v, double nw)
-        : vec(v), w(nw) {}
+        : x(v.x), y(v.y), z(v.z), w(nw) {}   // vec() is an accessor now, not a member
 
     Quat(const Quat& other) = default;
     ~Quat() = default;

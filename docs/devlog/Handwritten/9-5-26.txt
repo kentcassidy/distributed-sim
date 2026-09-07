@@ -1,0 +1,17 @@
+Starting on slow Saturday noon after a nice sleep debt recovery. Unfortunately that's put me into timeline tech-debt, but let's get her done.
+
+First thing, I'm establishing that I am getting AI's help by parsing and understanding the IEEE1516e standard. 
+
+Choosing to "order" on TimeStamp retains causality IAW logical time ordering / "total ordering". This establishes deterministic reordering of events. (Key point for interview)
+
+Interview: Note that quaternion math was hand implemented (with online reference of course)
+
+"This determinism is the whole reason we chose EVOKED mode" (what is this?)
+
+
+C++ notes;
+- #pragma once can be used instead of #ifndef
+- override is used instead of dynamic throw at inherited method declaration. Completely banished C++14 and onwards.
+- Rule of Zero: don't declare any of the special members, let the compiler handle
+	--> Destructor, Copy Constructor, Copy Assignment, Move Constructor, Move Assignment
+	--> Standard Constructor behavior must be defined

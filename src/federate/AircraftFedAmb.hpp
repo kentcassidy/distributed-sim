@@ -29,7 +29,11 @@ public:
     bool isReadyToRun;
 
     map<ObjectInstanceHandle, GhostRecord> ghosts;
-    
+
+    // Set by the federate after join() so reflect() can recognize which entry in
+    // the attribute map is Position. Handles don't exist until we've joined.
+    AttributeHandle positionHandle;
+
     // methods//
     AircraftFedAmb();
     virtual ~AircraftFedAmb() throw();

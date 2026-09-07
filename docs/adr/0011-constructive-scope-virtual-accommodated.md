@@ -1,6 +1,6 @@
 # ADR-0011: Constructive Scope Now; Virtual Accommodated by Design
 
-- **Status:** Proposed
+- **Status:** Accepted (locked at M1, 2026-09-07)
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

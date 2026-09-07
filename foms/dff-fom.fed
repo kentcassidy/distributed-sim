@@ -1,0 +1,30 @@
+;; Distributed Flight-Dynamics FOM -- HLA 1.3 (.fed) form.
+;;
+;; Used to bring up the handshake instead of the 1516e XML: the .fed format
+;; carries NO datatypes (attributes are opaque byte buffers, which is exactly
+;; what Encoding.cpp produces), and it is the format the vendored C++ example is
+;; proven against. Root object class is ObjectRoot (1.3 name), NOT HLAobjectRoot.
+;;
+;; Transport/order per attribute: reliable|best_effort  timestamp|receive.
+;;   - identity/inertial attrs -> receive (no timestamp needed)
+;;   - kinematic state         -> timestamp (ready for conservative time mgmt)
+(FED
+  (Federation DffFederation)
+  (FEDversion v1.3)
+  (objects
+    (class ObjectRoot
+      (attribute privilegeToDelete reliable timestamp)
+      (class Aircraft
+        (attribute EntityId    reliable receive)
+        (attribute Mass        reliable receive)
+        (attribute Radius      reliable receive)
+        (attribute Position    reliable timestamp)
+        (attribute Velocity    reliable timestamp)
+        (attribute Orientation reliable timestamp)
+      )
+    )
+  )
+  (interactions
+    (class InteractionRoot reliable timestamp)
+  )
+)

@@ -1,44 +1,36 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// aircraft_federate — the RTI-facing simulator process (M1 and on).
+// aircraft_federate — the RTI-facing simulator process (M1 handshake).
 //
-// Responsibilities to build here (this stub does none of them yet):
-//   * create/join the federation; publish & subscribe the Aircraft object class
-//     declared in your hand-authored FOM (foms/)
-//   * own the aircraft inside THIS federate's assigned sector, and advance them
-//     each step via dff_core (the RTI-free model)
-//   * hold read-only ghosts of neighbours; maintain a halo band just past the
-//     sector boundary so approaching traffic is visible before it crosses
-//   * hand off an aircraft (ownership transfer, or delete-here / create-there)
-//     when it leaves this sector
-//   * drive HLA time management — regulating + constrained, with lookahead —
-//     so the split run advances in lockstep with a co-located run
+// Thin launcher: pick a federate name from argv, construct the federate, run it.
+// All simulation/HLA logic lives in AircraftFederate — main just wires argv to it
+// and turns any RTI exception into a non-zero exit. Run two of these (with
+// different names) from the repo root to see two federates exchange Position:
+//     ./aircraft_federate aircraft-1
+//     ./aircraft_federate aircraft-2
 //
-// The design boundary: THIS file (and its siblings) is the only place allowed
-// to include Portico headers. All physics stays behind dff_core.
-//
-// Right now this stub just proves the wiring: it links Portico and dff_core and
-// runs, so the build graph is green before any real logic exists.
+// The design boundary: this target is the only place allowed to include Portico
+// headers. All physics stays behind dff_core (the RTI-free model).
 // ─────────────────────────────────────────────────────────────────────────────
-#include "AircraftFederate.hpp"
 #include <iostream>
+#include <string>
+#include "AircraftFederate.hpp"
 
-int main(int argc, char** argv) {
-	#if 0
-	try {
-		dff::AircraftFederate fed(argc > 1 ? argv[1] : "config/scenario.example.json");
-		fed.run();
-	} catch (const std::exception& e) {
-		std::cerr << "fatal: " << e.what() << "\n";
-		return 1;
-	}
-	return 0;
-	#endif
+using namespace std;
 
+int main(int argc, char* argv[]) {
+    wstring federateName = L"aircraft-1";
+    if (argc > 1) {
+        string arg(argv[1]);
+        federateName.assign(arg.begin(), arg.end());   // ASCII narrow -> wide
+    }
 
+    try {
+        AircraftFederate federate;
+        federate.run(federateName);
+    } catch (const rti1516e::Exception& e) {
+        wcerr << L"RTI exception: " << e.what() << endl;
+        return 1;
+    }
 
-    std::cout << "aircraft_federate skeleton — linked against "
-              << dff::core_version() << "\n";
-    std::cout << "TODO(M1): join federation, pub/sub the FOM, ownership, "
-                 "time management.\n";
     return 0;
 }

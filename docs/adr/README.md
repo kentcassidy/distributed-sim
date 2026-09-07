@@ -15,17 +15,18 @@ ADR supersedes it, and the superseded record is marked accordingly.
 | [0003](0003-language-discipline.md) | C++ for model/federates/ensemble; scripting only for plots | Accepted | — |
 | [0004](0004-project-framing.md) | Frame as validation study, present as result | Accepted | — |
 | [0005](0005-model-fidelity.md) | Linearized longitudinal model as fidelity floor | Proposed | M2 |
-| [0006](0006-model-core-and-drivers.md) | Separate model core from execution drivers | Proposed | M1 |
-| [0007](0007-coupled-formation-scenario.md) | Couple the aircraft via formation-keeping | Proposed | M3 |
+| [0006](0006-model-core-and-drivers.md) | Separate model core from execution drivers | Accepted | — |
+| [0007](0007-coupled-formation-scenario.md) | Couple the aircraft via formation-keeping (collision is post-MVP) | Accepted | — |
 | [0008](0008-latency-injection.md) | Inject impairment at the network layer (tc netem) | Proposed | M4 |
 | [0009](0009-isolation-constraint.md) | Strict isolation from other independent work | Accepted | — |
 | [0010](0010-storm-and-turbulence.md) | Rankine vortex storm with Dryden turbulence | Proposed | M2 |
-| [0011](0011-constructive-scope-virtual-accommodated.md) | Constructive scope; virtual accommodated by design | Proposed | M1 |
+| [0011](0011-constructive-scope-virtual-accommodated.md) | Constructive scope; virtual accommodated by design | Accepted | — |
 | [0012](0012-container-base-image-and-toolchain.md) | Ubuntu 22.04 + GCC 11 base image and toolchain | Accepted | — |
 | [0013](0013-config-driven-entity-partition-model.md) | Config-driven entity/partition model — N aircraft over K containers (amended by 0015) | Accepted | — |
 | [0014](0014-portico-old-cxx-abi.md) | Build against Portico's old C++ ABI; gnu++14 for RTI-facing code | Accepted | — |
 | [0015](0015-space-partitioned-placement-and-controller.md) | Space-partitioned placement with a controller federate | Accepted | — |
 | [0016](0016-core-object-model.md) | Core object model — composition-first, shallow interfaces | Accepted | — |
+| [0017](0017-fom-format-fed.md) | Author the FOM in HLA 1.3 (.fed) format, not 1516e XML | Accepted | — |
 
 **Status key.** *Proposed* — the decision is recorded but not yet locked; it
 moves to *Accepted* when resolved at or before the noted milestone. *Accepted* —

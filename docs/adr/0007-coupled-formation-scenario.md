@@ -1,6 +1,6 @@
 # ADR-0007: Couple the Aircraft via Formation-Keeping
 
-- **Status:** Proposed
+- **Status:** Accepted (locked 2026-09-05: formation-keeping is the MVP coupling; collision is the immediate post-MVP feature)
 - **Date:** 2026-08-31
 - **Deciders:** Kent
 

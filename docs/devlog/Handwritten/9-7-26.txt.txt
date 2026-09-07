@@ -1,0 +1,52 @@
+Learned some new behavior from Claude. I still don't fully trust the "determinism" but with ADRs that are declared immutable, Claude will prioritize them. This goes for minor things like .xml config filetype vs the .fed that now works. Makes me feel more secure in some things moving forward. 
+
+
+Here's the full landscape of distributed-systems concerns HLA/Portico handles for you, so you can stop budgeting for them:
+
+Delivery & transport reliability
+
+- Reliable delivery (HLAreliable) — TCP-grade guaranteed, in-order, no-loss delivery. This is what defuses your Two Generals' worry for control messages.
+- Best-effort delivery (HLAbestEffort) — when you explicitly want fire-and-forget (you don't, yet).
+- Message framing / serialization boundaries — you never deal with packet boundaries, fragmentation, or reassembly. You hand it typed byte buffers; it delivers whole attribute updates.
+- Connection management — the connect()/disconnect() and the JGroups GMS (group membership) layer handle socket setup, teardown, and peer discovery. You saw this in your log.
+
+Membership & lifecycle
+
+- Join/resign tracking — the RTI always knows who's in the federation; you don't maintain a peer registry.
+- Group membership / failure detection — that GMS line is a membership service. If a federate crashes or drops, the RTI notices and can notify survivors (you saw the "we still have active federates, ignoring" case — it correctly refused a premature teardown).
+- Federation creation races — resolved by the RTI converging everyone onto one federation execution even when two "create" near-simultaneously.
+
+Coordination & consensus
+
+- Synchronization points — the barrier we just discussed. Distributed consensus-flavored agreement, built for you on reliable transport + a coordinator.
+- Ownership arbitration — HLA guarantees exactly one authoritative owner per attribute instance. This is a distributed mutual-exclusion guarantee you'd otherwise have to build; it's also the backbone of your partition-invariance claim (ADR-0015: "singularity of computation").
+- Ownership transfer protocol — the negotiated handoff of authority (divest/acquire), which is what your future sector handoff rides on.
+
+Time & ordering
+
+- Logical time management — regulating/constrained, lookahead, and the LBTS (lower-bound-on-time-stamp) computation that keeps everyone advancing in lockstep. This is a distributed clock-synchronization + safe-advance algorithm you get for free.
+- Timestamp-ordered (TSO) delivery — messages delivered in logical-time order across the whole federation, not arrival order. This is the deterministic-ordering guarantee your reproducibility/invariance depends on.
+- Receive-order (RO) delivery — the unordered fast path when you don't need TSO.
+- Deadlock-free advance — the conservative time algorithm is designed so correctly-behaving federates won't livelock (though you can still induce deadlock by misusing lookahead — that's the "induce and fix" checkpoint in your roadmap).
+
+Data distribution & interest
+
+- Publish/subscribe routing — you declare interest; the RTI decides who needs what and routes it. No manual subscriber lists.
+- Interest filtering — you only receive classes/attributes you subscribed to; irrelevant traffic is filtered before it reaches you. (DDM region-based filtering is the fancier version you're not using per ADR-0015 — you're doing manual sector/halo filtering instead, since Portico 2.1.0's DDM is partial.)
+- Discovery — new remote objects announced to you automatically (discoverObjectInstance); you don't poll for "who exists."
+
+Naming & identity
+
+- Federation-unique handles — object, attribute, class, interaction, and federate handles are allocated and kept consistent across the federation. You don't design an ID scheme or worry about collisions (the "both handle=2" thing is local display, disambiguated internally).
+- Name↔handle resolution — string names in the FOM resolved to efficient handles once, consistently everywhere.
+
+What the RTI does not cover (still yours)
+
+So you can draw the line cleanly, these remain your responsibility:
+- Encoding/decoding semantics — the meaning of the bytes (your Encoding.cpp). The RTI moves buffers; agreeing on their layout is on you. This is deliberately where you own invariance.
+- Application-level determinism — same seeds, same float ordering, RK4 step reproducibility. The RTI orders messages; it doesn't make your physics bit-identical.
+- Latency injection — your MVP impairment is an in-federate delay buffer (ADR-0008); the RTI won't degrade itself for you.
+- Sector/halo interest logic — because you're doing manual filtering, not DDM.
+- Byte-level cross-host FP agreement — the discrete-event/collision hard case.
+
+Net for your planning: cross off transport reliability, membership, failure detection, pub/sub routing, ordering, time sync, ID allocation, and barrier/consensus — all RTI. What's left on your plate is essentially the physics, the byte encoding, the interest geometry, and the impairment model — which is precisely the competency the project is meant to demonstrate. The RTI carries the plumbing; you carry the simulation.

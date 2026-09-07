@@ -1,80 +1,175 @@
+#include <iostream>
+#include <vector>
+#include <RTI/RTI1516.h>
+#include <RTI/RTIambassadorFactory.h>
 #include "AircraftFederate.hpp"
 
-#if 0
-void AircraftFederate::run() {
-	join();
-        while(t < t_end) {
-            // ghosts refresh asynchronously via reflectAttributeValues callbacks
-            requestTimeAdvance(t + dt);     // RTI grands only when LBTS allows (all federates ready)
-            // ... blocks until timeAdvanceGrant ...
-            world.advance(dt);              // integrate owned_ + resolve collisions (owned-owned; owned-ghost at seam)
-            doHandoffs();                   // planes that left this sector
-            publishOwned();                 // updateAttributeValues -> refreshes everyone else's ghosts
-            t += dt;
-        }
+using namespace std;
+
+// Fixed for the MVP handshake. FOM_MODULE is resolved against the process working
+// directory, so run both federates from the repo root (or pass an absolute path).
+static const wstring FEDERATION     = L"DffFederation";
+static const wstring FOM_MODULE     = L"foms/dff-fom.fed";      // 1.3 .fed for bring-up; XML is the eventual deliverable
+static const wstring AIRCRAFT_CLASS = L"ObjectRoot.Aircraft";   // .fed root is ObjectRoot, not HLAobjectRoot
+
+// unique_ptr<RTIambassador> needs the complete type where it's destroyed, so the
+// destructor lives here (in the .cpp) rather than being implicit in the header.
+AircraftFederate::AircraftFederate() {}
+AircraftFederate::~AircraftFederate() {}
+
+////////////////////
+// Public lifecycle
+//////////
+void AircraftFederate::run(wstring federateName, bool interactive) {
+    connectToRti();
+    createAndJoin(federateName);
+    cacheHandles();
+    publishAndSubscribe();
+    registerOwnAircraft();
+
+    // Barrier for the two-federate demo: hold here until BOTH federates have
+    // registered, so their publish loops overlap and discovery/reflection cross.
+    // Skipped when non-interactive (CI smoke test) so it doesn't block.
+    if (interactive)
+        waitForUser();
+
+    // Main loop: no time management yet. Publish our Position each tick, then
+    // evoke callbacks so the RTI delivers the OTHER federate's discover/reflect.
+    for (int i = 0; i < 50; i++) {
+        step(i * 1.0);
+        rtiamb->evokeMultipleCallbacks(0.1, 0.2);
+    }
+
+    resignAndDestroy();
 }
-#endif        
 
-CLASS AircraftFederate
-    STATE: rtiAmbassador, an AircraftFedAmb instance, cached handles
-           (Aircraft class handle; Position/Velocity/Orientation/EntityId attr
-           handles), our own ObjectInstanceHandle, our federate name.
-      // WHY cache handles: getXHandle() is a lookup; you resolve names to handles
-      // ONCE after join and reuse the handles in the hot loop. Passing string
-      // names every update would be slower and is not how HLA is meant to be used.
+////////////////////
+// 1. Connect
+//////////
+void AircraftFederate::connectToRti() {
+    RTIambassadorFactory factory;
+    // createRTIambassador() hands back a smart pointer; release() moves ownership
+    // into our unique_ptr (works whether Portico hands back auto_ptr or unique_ptr).
+    this->rtiamb.reset( factory.createRTIambassador().release() );
 
-    METHOD run(federateName, fedFile):
-      // ---- 1. Connect ----
-      create RTIambassador (via the factory)
-      rtiAmb.connect(fedAmb, EVOKED)
-        // WHY EVOKED not IMMEDIATE: EVOKED means callbacks fire only when WE call
-        // evokeCallback() — single-threaded, deterministic, and the model time
-        // management needs later. IMMEDIATE spawns an RTI thread that calls back
-        // whenever — easier for toys, wrong for a reproducible federation.
-        // (1516-2010 requires this connect() step; 1516-2000 had no connect.)
+    // EVOKED: callbacks fire only inside evokeMultipleCallbacks(), single-threaded.
+    this->rtiamb->connect(this->fedamb, HLA_EVOKED);
+    wcout << L"Connected to RTI" << endl;
+}
 
-      // ---- 2. Create federation (idempotent) ----
-      TRY rtiAmb.createFederationExecution(federationName, fomModulePath)
-      CATCH FederationExecutionAlreadyExists: ignore
-        // WHY swallow it: whichever federate starts first creates it; the rest
-        // find it already there. This is the normal race, not an error.
+////////////////////
+// 2-3. Create (idempotent) + join
+//////////
+void AircraftFederate::createAndJoin(wstring federateName) {
+    // Whichever federate starts first creates the execution; the rest just join.
+    // Pass the FOM as a MODULE LIST (what both shipped examples do) rather than a
+    // bare string — the single-string overload doesn't load it the same way.
+    try {
+        vector<wstring> fomModules;
+        fomModules.push_back(FOM_MODULE);
+        this->rtiamb->createFederationExecution(FEDERATION, fomModules);
+        wcout << L"Created federation " << FEDERATION << L" (fresh, from " << FOM_MODULE << L")" << endl;
+    } catch (FederationExecutionAlreadyExists&) {
+        wcout << L"Federation already existed; joining it (NOTE: my FOM edits are NOT reloaded)" << endl;
+    }
 
-      // ---- 3. Join ----
-      ourFederateHandle = rtiAmb.joinFederationExecution(
-                              federateName, "Aircraft", federationName)
+    this->rtiamb->joinFederationExecution(federateName, L"Aircraft", FEDERATION);
+    wcout << L"Joined as " << federateName << endl;
+}
 
-      // ---- 4. Resolve + cache handles ----
-      AircraftClass = getObjectClassHandle("HLAobjectRoot.Aircraft")
-      Position handle = getAttributeHandle(AircraftClass, "Position")
-      ... (EntityId, Velocity, Orientation similarly, even if unused this slice)
-      hand the Position handle to the FedAmb so it can match in reflect()
+////////////////////
+// 4. Resolve + cache handles (only valid once joined)
+//////////
+void AircraftFederate::cacheHandles() {
+    this->aircraftClass = rtiamb->getObjectClassHandle(AIRCRAFT_CLASS);
 
-      // ---- 5. Declare interest: publish + subscribe ----
-      build an AttributeHandleSet containing (at least) Position
-      rtiAmb.publishObjectClassAttributes(AircraftClass, thatSet)
-      rtiAmb.subscribeObjectClassAttributes(AircraftClass, thatSet)
-        // WHY both in one binary: proves pub AND sub together, and mirrors the
-        // real design where every federate both owns and observes aircraft.
+    this->entityIdHandle    = rtiamb->getAttributeHandle(aircraftClass, L"EntityId");
+    this->massHandle        = rtiamb->getAttributeHandle(aircraftClass, L"Mass");
+    this->radiusHandle      = rtiamb->getAttributeHandle(aircraftClass, L"Radius");
+    this->positionHandle    = rtiamb->getAttributeHandle(aircraftClass, L"Position");
+    this->velocityHandle    = rtiamb->getAttributeHandle(aircraftClass, L"Velocity");
+    this->orientationHandle = rtiamb->getAttributeHandle(aircraftClass, L"Orientation");
 
-      // ---- 6. Register our owned object ----
-      ourAircraft = rtiAmb.registerObjectInstance(AircraftClass)
-        // this is the moment other federates get discoverObjectInstance().
-        // Later: also send the Static attrs (EntityId/Mass/Radius) right here, once.
+    // hand Position to the ambassador so reflect() can match it in the value map
+    this->fedamb.positionHandle = this->positionHandle;
 
-      // ---- 7. Main loop (no time management yet) ----
-      REPEAT some fixed number of ticks:
-          compute a dummy Position (e.g. move x forward a bit each tick)
-          encode Position -> bytes
-          build an AttributeHandleValueMap { Position handle -> bytes }
-          rtiAmb.updateAttributeValues(ourAircraft, thatMap, userTag)
-          rtiAmb.evokeMultipleCallbacks(minSeconds, maxSeconds)
-            // WHY evoke here: in EVOKED mode this is what actually delivers the
-            // other federate's discover/reflect callbacks. No evoke = deaf federate.
-          wait a small wall-clock interval   // pacing only; real pacing is TM later
+    // DIAGNOSTIC: bisects the failure. If class is valid but Position is not, the
+    // class loaded without its attributes (FOM attribute parse). If BOTH are
+    // invalid, the FOM/object model didn't load at all (stale federation or path).
+    wcout << L"[handles] aircraftClass.isValid=" << this->aircraftClass.isValid()
+          << L"  position.isValid="              << this->positionHandle.isValid()
+          << L"  entityId.isValid="              << this->entityIdHandle.isValid() << endl;
+}
 
-      // ---- 8. Tear down ----
-      rtiAmb.resignFederationExecution(DELETE_OBJECTS_THEN_DIVEST)
-      TRY rtiAmb.destroyFederationExecution(federationName)
-      CATCH FederatesCurrentlyJoined: ignore   // someone else still in; they'll destroy
-      CATCH FederationExecutionDoesNotExist: ignore
-      rtiAmb.disconnect()
+////////////////////
+// 5. Declare interest
+//////////
+void AircraftFederate::publishAndSubscribe() {
+    // Only Position is wired for the handshake; the rest join this set as the
+    // model comes online. Publishing AND subscribing in one binary proves both
+    // directions and mirrors the real design (every federate owns and observes).
+    AttributeHandleSet attributes;
+    attributes.insert(this->positionHandle);
+
+    rtiamb->publishObjectClassAttributes(this->aircraftClass, attributes);
+    rtiamb->subscribeObjectClassAttributes(this->aircraftClass, attributes);
+    wcout << L"Published and subscribed Aircraft.Position" << endl;
+}
+
+////////////////////
+// 6. Register our owned aircraft
+//////////
+void AircraftFederate::registerOwnAircraft() {
+    // The moment other federates receive discoverObjectInstance() for us.
+    this->ownAircraft = rtiamb->registerObjectInstance(this->aircraftClass);
+    wcout << L"Registered own Aircraft, handle=" << this->ownAircraft << endl;
+}
+
+////////////////////
+// Demo barrier: block until the user has started both federates
+//////////
+void AircraftFederate::waitForUser() {
+    wcout << L">>> Press ENTER once BOTH federates print 'Registered' <<<" << endl;
+    string line;
+    getline(cin, line);
+}
+
+////////////////////
+// 7. One step: dummy kinematics + publish Position
+//////////
+void AircraftFederate::step(double simTime) {
+    // Placeholder until dff_core's flight model lands: drift along +x over time.
+    Vec3 position(simTime * 10.0, 0.0, 0.0);
+
+    AttributeHandleValueMap attributes;
+    attributes[this->positionHandle] = encodeVec3(position);
+
+    VariableLengthData tag((void*)"pos", 4);
+    rtiamb->updateAttributeValues(this->ownAircraft, attributes, tag);
+
+    wcout << L"Published Position = (" << position.x << L", "
+          << position.y << L", " << position.z << L")" << endl;
+}
+
+////////////////////
+// 8. Tear down
+//////////
+void AircraftFederate::resignAndDestroy() {
+    VariableLengthData tag((void*)"bye", 4);
+    rtiamb->deleteObjectInstance(this->ownAircraft, tag);
+    rtiamb->resignFederationExecution(NO_ACTION);
+    wcout << L"Resigned from federation" << endl;
+
+    // Only the last federate out succeeds here; the others are expected to fail.
+    try {
+        rtiamb->destroyFederationExecution(FEDERATION);
+        wcout << L"Destroyed federation" << endl;
+    } catch (FederatesCurrentlyJoined&) {
+        wcout << L"Others still joined; leaving federation for them to destroy" << endl;
+    } catch (FederationExecutionDoesNotExist&) {
+        wcout << L"Federation already gone" << endl;
+    }
+
+    rtiamb->disconnect();
+    wcout << L"Disconnected from RTI" << endl;
+}

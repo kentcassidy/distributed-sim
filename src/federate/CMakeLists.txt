@@ -2,7 +2,10 @@
 # BOTH Portico (the transport) and dff_core (the model). This is the ONLY kind
 # of target permitted to include Portico / ieee1516e headers.
 add_executable(aircraft_federate
-    main.cpp)
+    main.cpp
+    AircraftFederate.cpp
+    AircraftFedAmb.cpp
+    Encoding.cpp)
 
 target_link_libraries(aircraft_federate PRIVATE Portico::Portico dff_core)
 

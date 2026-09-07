@@ -216,12 +216,15 @@ td code{font-size:11.5px}
   <div id="tl-ck"></div>
 
   <div class="note ok">
-    <span class="lbl">Progress &mdash; M0 complete, M1 next (Sep 3)</span>
-    <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored and building;
-    a federate that creates and joins a federation; the <code>src/</code> skeleton (green build graph); the object
-    model and sector/controller architecture (ADRs&nbsp;0015&ndash;0016). <strong>Next:</strong> the M1 RTI handshake
-    against a trivial FOM, with the RTI-free core headers started in parallel. The session journal lives in
-    <code>docs/devlog/</code>.
+    <span class="lbl">Progress &mdash; M1 handshake landed (Sep 7), M2 flight model next</span>
+    <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored; the
+    <code>src/</code> skeleton (green build graph); object model + sector/controller architecture
+    (ADRs&nbsp;0015&ndash;0016); and the <strong>M1 RTI handshake</strong> &mdash; a federate creates/joins, publishes
+    &amp; subscribes one attribute, discovers/reflects, and resigns/destroys cleanly against a hand-authored FOM (in
+    <code>.fed</code> form, ADR-0017). A start barrier is now in place for the two-federate exchange confirmation.
+    <strong>Next:</strong> M2 flight model &mdash; RK4 + linearized longitudinal in <code>dff_core</code>, verified
+    against published modes, replacing the federate's placeholder state. Collision is deferred to the immediate
+    post-MVP feature (ADR-0007: formation-keeping is the MVP coupling). Session journal in <code>docs/devlog/</code>.
   </div>
 
   <script>(function(){
@@ -261,12 +264,31 @@ td code{font-size:11.5px}
           {day:7, text:"If conservative time management isn't working by end of the holiday, fall back to best-effort receive-order."},
           {day:11, text:"Co-located-vs-split match plus one delay point &mdash; minimum shippable (unchanged)."}
         ]
+      },
+      { id:"v3", label:"Re-forecast", when:"Sep 7", day:7,
+        note:"Handshake landed on the 7th, ~2 days behind. Collision is deferred to the immediate post-MVP feature (ADR-0007: formation-keeping is the MVP coupling), taking the sector/handoff/controller work off the MVP critical path and absorbing the slip. FOM authored in .fed (ADR-0017).",
+        standing:"through the RTI handshake &mdash; create/join, one-attribute pub/sub, discover/reflect, clean lifecycle; a start barrier is in, two-federate cross-exchange is the immediate next confirmation",
+        marks:[{day:7,label:"holiday"},{day:8,label:"½"},{day:9,label:"½"},{day:10,label:"½"},{day:11,label:"½"}],
+        phases:[
+          {name:"Bootstrap",        s:1,e:3, status:"done", focus:"Container, Portico, CMake, src/ skeleton, ADRs 0015/0016.", done:"Federate builds and joins; skeleton green."},
+          {name:"RTI handshake",    s:4,e:7, status:"done", focus:"FOM (.fed); one-attribute pub/sub; discover/reflect; clean lifecycle. ADR-0017.", done:"Two federates exchange an attribute."},
+          {name:"Flight model",     s:7,e:8, focus:"RK4 + linearized longitudinal in dff_core; eigenvalue check vs published modes; publish real State.", done:"Modes match; federate publishes real state."},
+          {name:"Time mgmt + sync", s:9,e:10, focus:"Regulating + constrained, lookahead; HLA sync-point barrier for a deterministic coordinated start.", done:"Conservative time runs; federates start in lockstep."},
+          {name:"Formation + delay",s:10,e:11, focus:"Follower holds station on the dead-reckoned ghost; in-federate delay buffer; CSV logger.", done:"Follower tracks; delay injectable."},
+          {name:"Partition V&amp;V", s:11,e:12, focus:"Co-located (K=1) vs split (K=2) match at zero impairment; one delay point.", done:"Match confirmed; one degradation point."},
+          {name:"Package",          s:12,e:13, focus:"2-page V&amp;V writeup; finish ADRs; README; retrospective.", done:"A stranger can clone, build, reproduce."}
+        ],
+        checks:[
+          {day:8, text:"Flight model verified (modes match published values) and publishing real state &mdash; or the physics is slipping."},
+          {day:10, text:"If conservative time management + the sync barrier aren't working, fall back to best-effort receive-order and ship with honest limits."},
+          {day:12, text:"Co-located-vs-split match plus one delay point &mdash; minimum shippable (unchanged)."}
+        ]
       }
     ];
 
     // CURRENT actual project status, by phase name. Update as reality lands;
     // the ghost on every PREVIOUS timeline is derived from this single source.
-    var STATUS = { done:["Bootstrap"], active:["RTI handshake"] };
+    var STATUS = { done:["Bootstrap","RTI handshake"], active:["Flight model"] };
     function statusOf(name){
       if(STATUS.done.indexOf(name)>=0) return 'done';
       if(STATUS.active.indexOf(name)>=0) return 'active';
