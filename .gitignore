@@ -12,7 +12,11 @@
 .DS_Store
 Thumbs.db
 
+# ── Portico unzipped source (for reference only)
+/third_party/portico-2.1.0-linux64/
+/third_party/portico_docs/
 # ── NOTE ──
+
 # Docker images are NOT files and never enter git — they rebuild from the
 # Dockerfile. The vendored RTI tarball IS tracked on purpose, so do not ignore it:
 !third_party/portico-2.1.0-linux64.tar.gz

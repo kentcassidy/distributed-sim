@@ -14,13 +14,19 @@
     </modelIdentification>
 
     <objects>
-        <!-- Everything descents from the predefined HLAobjectRoot. Never redeclare or its previlegeToDelete attribute; rather nest under it . -->
-        <objectClass name="HLAobjectRoot">
-            <objectClass name="Aircraft">
+        <!-- Portico's 1516e DIF parser wants <name> as a CHILD ELEMENT (not a
+             name="..." attribute), and every <attribute> must carry the full
+             element sequence INCLUDING an empty <dimensions/> before
+             <transportation>. Structure mirrors Portico's shipped example FOMs. -->
+        <objectClass>
+            <name>HLAobjectRoot</name>
+            <objectClass>
+                <name>Aircraft</name>
                 <sharing>PublishSubscribe</sharing>
 
-                <!-- Identity + intertial properties: Static = sent once at registration,
-                    never updated. EntityId ties the HLA instance to a C++ Aircraft.   -->
+                <!-- Identity + inertial properties: Static = sent once at
+                     registration, never updated. EntityId ties the HLA instance
+                     to a C++ Aircraft. -->
                 <attribute>
                     <name>EntityId</name>
                     <dataType>HLAinteger32BE</dataType>
@@ -28,6 +34,7 @@
                     <updateCondition>NA</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
                     <order>Receive</order>
                 </attribute>
@@ -38,6 +45,7 @@
                     <updateCondition>NA</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
                     <order>Receive</order>
                 </attribute>
@@ -48,13 +56,14 @@
                     <updateCondition>NA</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
                     <order>Receive</order>
                 </attribute>
-                
-                <!-- Kinematic state: Periodic (sent each step / on DR threshold)m
-                    TimeStamp order so conservative time management can order them.
-                    Position is the only one wired for today's (9/5) handshake.    -->
+
+                <!-- Kinematic state: Periodic (sent each step / on DR threshold),
+                     TimeStamp order so conservative time management can order them.
+                     Position is the only one wired for today's handshake. -->
                 <attribute>
                     <name>Position</name>
                     <dataType>Vector3D</dataType>
@@ -62,8 +71,9 @@
                     <updateCondition>On advance</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
-                    <order>Timestamp</order>
+                    <order>TimeStamp</order>
                 </attribute>
                 <attribute>
                     <name>Velocity</name>
@@ -72,8 +82,9 @@
                     <updateCondition>On advance</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
-                    <order>Timestamp</order>
+                    <order>TimeStamp</order>
                 </attribute>
                 <attribute>
                     <name>Orientation</name>
@@ -82,8 +93,9 @@
                     <updateCondition>On advance</updateCondition>
                     <ownership>NoTransfer</ownership>
                     <sharing>PublishSubscribe</sharing>
+                    <dimensions/>
                     <transportation>HLAreliable</transportation>
-                    <order>Timestamp</order>
+                    <order>TimeStamp</order>
                 </attribute>
             </objectClass>
         </objectClass>
@@ -91,10 +103,12 @@
 
     <!-- No custom interactions yet; the root must still be present. -->
     <interactions>
-        <interactionClass name="HLAinteractionRoot"/>
+        <interactionClass>
+            <name>HLAinteractionRoot</name>
+        </interactionClass>
     </interactions>
 
-    <!-- Custom datatypes. HLAfloat64BE / HLAinteger32BE are predefined from the standard MIM. -->
+    <!-- Custom datatypes. HLAfloat64BE / HLAinteger32BE are predefined by the MIM. -->
     <dataTypes>
         <arrayDataTypes>
             <arrayData>
