@@ -24,9 +24,13 @@ int main(int argc, char* argv[]) {
         federateName.assign(arg.begin(), arg.end());   // ASCII narrow -> wide
     }
 
+    // Optional "wait" 2nd arg holds at a start barrier so you can bring up both
+    // federates before either publishes. (Superseded later by HLA sync points.)
+    bool interactive = (argc > 2 && string(argv[2]) == "wait");
+
     try {
         AircraftFederate federate;
-        federate.run(federateName);
+        federate.run(federateName, interactive);
     } catch (const rti1516e::Exception& e) {
         wcerr << L"RTI exception: " << e.what() << endl;
         return 1;

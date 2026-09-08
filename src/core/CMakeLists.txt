@@ -3,7 +3,12 @@
 # and be unit-tested with no RTI, and what makes it reusable behind any driver
 # (the aircraft federate today; a batch/replay driver later).
 add_library(dff_core STATIC
-    dff_core.cpp)
+    dff_core.cpp
+    Aircraft.cpp
+    LinearLongitudinal.cpp
+    Integrator.cpp
+    Collision.cpp
+    World.cpp)
 
 # PUBLIC so anything linking dff_core (the federate, the controller, tests) can
 # #include its headers by plain name.

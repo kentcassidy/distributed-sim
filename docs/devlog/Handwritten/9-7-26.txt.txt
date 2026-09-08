@@ -1,6 +1,10 @@
 Learned some new behavior from Claude. I still don't fully trust the "determinism" but with ADRs that are declared immutable, Claude will prioritize them. This goes for minor things like .xml config filetype vs the .fed that now works. Makes me feel more secure in some things moving forward. 
 
 
+So there's a lot of similarity between RTI and RNA, but for distinctly different purposes. Identify and print/explain them for interview.
+
+"""
+
 Here's the full landscape of distributed-systems concerns HLA/Portico handles for you, so you can stop budgeting for them:
 
 Delivery & transport reliability
