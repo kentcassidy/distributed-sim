@@ -1,3 +1,4 @@
+#include <cmath>
 #include "Integrator.hpp"
 #include "DynamicsModel.hpp"
 #include "AircraftParams.hpp"
@@ -43,7 +44,7 @@ State rk4Step(const State& s, double dt, const DynamicsModel& model, const Aircr
     renormAtt(s_k3);
     StateDot k3 = model.derivative(s_k3, p);
 
-    State s_k4 = s + k3 * half_dt;
+    State s_k4 = s + k3 * dt;          // RK4: k4 is evaluated at the FULL step, not half
     renormAtt(s_k4);
     StateDot k4 = model.derivative(s_k4, p);
 
@@ -51,7 +52,7 @@ State rk4Step(const State& s, double dt, const DynamicsModel& model, const Aircr
     StateDot final_derivative = (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (1.0 / 6.0);
 
     State s_next = s + final_derivative * dt;
-    renormAtt(s_next)
+    renormAtt(s_next);
 
     return s_next;
 }

@@ -120,6 +120,19 @@ inline Quat operator*(Quat lhs, const Quat& rhs) {
     return lhs *= rhs;
 }
 
+// --- Component-wise ops, for INTEGRATION ONLY (not quaternion algebra) ---
+// A quaternion RATE (qdot = 0.5 * omega (x) q) is integrated numerically as
+// q += qdot*dt, then renormalized -- which needs plain component-wise add and
+// scalar-multiply. These are NOT Hamilton operations: keep them separate from
+// operator*(Quat,Quat) above (composition) and operator*(Quat,Vec3) below (rotation).
+inline Quat operator+(const Quat& a, const Quat& b) {
+    return { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
+}
+inline Quat operator*(const Quat& q, double s) {
+    return { q.x * s, q.y * s, q.z * s, q.w * s };
+}
+inline Quat operator*(double s, const Quat& q) { return q * s; }
+
 // --- Vector Rotation Operator (Quat * Vec3) ----
 // This rotates a 3D point or direction vector by the quaternion's orientation.
 inline Vec3 operator*(const Quat& q, const Vec3& v) {

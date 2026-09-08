@@ -22,7 +22,7 @@ public:
 
     EntityId              id()     const { return id_; }
     const State&          state()  const { return state_; }
-    State&                state()        { return state_; }   // Collision mutates this // Do you mean "also"? How about standard movement or the wind?
+    State&                state()        { return state_; }   // external writers: Collision (a bounce), or the federate setting initial conditions. Normal motion/wind is written inside advance(), not through here.
     const AircraftParams& params() const { return params_; }
 
 private:
