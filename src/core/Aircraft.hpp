@@ -18,11 +18,11 @@ class Aircraft {
 public:
     Aircraft(EntityId id, const AircraftParams& params, const DynamicsModel* model);
 
-    void advance(double dt);                       // one integration step (M2-5)
+    void advance(double dt);
 
     EntityId              id()     const { return id_; }
     const State&          state()  const { return state_; }
-    State&                state()        { return state_; }   // Collision mutates this
+    State&                state()        { return state_; }   // Collision mutates this // Do you mean "also"? How about standard movement or the wind?
     const AircraftParams& params() const { return params_; }
 
 private:

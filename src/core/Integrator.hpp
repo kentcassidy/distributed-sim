@@ -15,6 +15,6 @@ struct AircraftParams;  // fwd
 // A step advances position/velocity/omega linearly but advances attitude by
 // quaternion kinematics and RENORMALIZES. Flagged here; handled in the .cpp (M2-3).
 namespace integrator {
-    State rk4Step  (const State& x, double dt, const DynamicsModel& model, const AircraftParams& p);
-    State eulerStep(const State& x, double dt, const DynamicsModel& model, const AircraftParams& p);  // interchangeable simplest (ADR-0016)
+    State rk4Step  (const State& s, double dt, const DynamicsModel& model, const AircraftParams& p);
+    State eulerStep(const State& s, double dt, const DynamicsModel& model, const AircraftParams& p);  // interchangeable simplest (ADR-0016)
 }

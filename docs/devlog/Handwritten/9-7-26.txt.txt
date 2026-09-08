@@ -3,6 +3,10 @@ Learned some new behavior from Claude. I still don't fully trust the "determinis
 
 So there's a lot of similarity between RTI and RNA, but for distinctly different purposes. Identify and print/explain them for interview.
 
+Side note: bring up RNA as a hyperoptimized architecture to network infrastructure that will bring heightened security and energy savings comparable to the LED.
+
+LESSON: Can't just "using StateDot = State;" even though the structs are near identical. This is for compiler protection against catastrophic physics bugs... Even though the State and StateDot have the same data structure, the meaning behind each variable is not one to one.
+
 """
 
 Here's the full landscape of distributed-systems concerns HLA/Portico handles for you, so you can stop budgeting for them:
