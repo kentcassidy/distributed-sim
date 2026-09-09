@@ -15,6 +15,19 @@ struct Sector {
     Vec3 min;   // AABB corner
     Vec3 max;   // AABB corner
 
-    bool contains(const Vec3& p) const { return false; }               // TODO(worldspace)
-    bool inHalo  (const Vec3& p, double haloWidth) const { return false; } // TODO(worldspace)
+    // Is point p inside this axis-aligned box? (inclusive on all six faces)
+    bool contains(const Vec3& p) const {
+        return p.x >= min.x && p.x <= max.x
+            && p.y >= min.y && p.y <= max.y
+            && p.z >= min.z && p.z <= max.z;
+    }
+
+    // Is p in the halo SHELL -- outside the sector but within haloWidth of it?
+    // (the band where a neighbour is visible as a ghost before it crosses the seam)
+    bool inHalo(const Vec3& p, double haloWidth) const {
+        if (contains(p)) return false;                       // inside the sector, not the shell
+        return p.x >= min.x - haloWidth && p.x <= max.x + haloWidth
+            && p.y >= min.y - haloWidth && p.y <= max.y + haloWidth
+            && p.z >= min.z - haloWidth && p.z <= max.z + haloWidth;
+    }
 };

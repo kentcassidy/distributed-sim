@@ -1,38 +1,49 @@
 #include "LinearLongitudinal.hpp"
+#include <cmath>
 
-// TODO(M2-2, M2-4): populate the A-matrix from published stability derivatives,
-// reduce the full State to [u, w, q, theta] about trim, apply the matrix, and
-// expand the rates back into a StateDot. Stub returns zero rates (no motion).
+// derivative() -- equations of motion for ONE aircraft: a linearized longitudinal
+// model about a steady cruise. MINIMAL FILLER for a distributed-systems PoC: the
+// coefficients are arbitrary-but-stable (see AircraftParams), not a real aircraft.
+// What matters is that it is (1) STABLE/bounded and (2) DETERMINISTIC -- same input,
+// same output -- because the real V&V is partition invariance (identical result
+// whether the world runs on one machine or split across several).
+//
+// Shape: reduce the full State to a reduced perturbation [u, w, q, theta] about
+// trim, apply the 4x4 A-matrix, expand the rates back into a StateDot. Exactly
+// linear (small-angle embedding), so a stable A can never diverge. Position
+// advances at the FULL world velocity (the constant cruise term), so the aircraft
+// actually travels across sectors -- which is what exercises the distributed code.
 StateDot LinearLongitudinal::derivative(const State& x, const AircraftParams& p) const {
-    return StateDot{};   // TODO
+    const AircraftParams::LonDerivs& d = p.lon;
+
+    // --- reduce: State -> [u, w, q, theta] about trim (small-angle) ---
+    // A pure pitch quaternion is [0, sin(th/2), 0, cos(th/2)] ~ [0, th/2, 0, 1],
+    // so theta ~ 2*attitude.y -- an exactly-linear read-out of pitch.
+    const double u  = x.velocity.x - p.trimSpeed;      // forward-speed perturbation
+    const double w  = x.velocity.z - p.trimW;          // vertical-speed perturbation
+    const double q  = x.angularV.y;                    // pitch rate
+    const double th = 2.0 * x.attitude.y - p.trimPitch;
+
+    // --- fold in the standard Mw_dot corrections (Mu*, Mw*, Mq*) ---
+    const double Mu = d.Mu + d.Mw_dot * d.Zu;
+    const double Mw = d.Mw + d.Mw_dot * d.Zw;
+    const double Mq = d.Mq + d.Mw_dot * (p.trimSpeed + d.Zq);
+
+    const double c = std::cos(p.trimPitch);
+    const double s = std::sin(p.trimPitch);
+    const double g = p.gravity;
+
+    // --- apply the 4x4 A-matrix: [u,w,q,theta] -> [udot,wdot,qdot,thetadot] ---
+    const double udot  = d.Xu*u + d.Xw*w + (d.Xq - p.trimW)*q     - g*c*th;
+    const double wdot  = d.Zu*u + d.Zw*w + (d.Zq + p.trimSpeed)*q - g*s*th;
+    const double qdot  = Mu*u   + Mw*w   + Mq*q                   - d.Mw_dot*g*s*th;
+    const double thdot = q;
+
+    // --- expand rates back into a StateDot (inverse of the reduction) ---
+    StateDot dot;
+    dot.dPosition = x.velocity;                          // travel through the world at full velocity
+    dot.dVelocity = Vec3{ udot, 0.0, wdot };             // longitudinal only; lateral untouched
+    dot.dAngularV = Vec3{ 0.0, qdot, 0.0 };              // pitch axis only
+    dot.dAttitude = Quat{ 0.0, 0.5 * thdot, 0.0, 0.0 };  // quaternion RATE; integrator renormalizes
+    return dot;
 }
-
-/*
-Found online:
-
-[ u_dot ]   [ X_u   X_w   (X_q - w0)       -g*cos(th0) ] [ u ]
-[ w_dot ] = [ Z_u   Z_w   (Z_q + u0)       -g*sin(th0) ] [ w ]
-[ q_dot ]   [ M_u   M_w   (M_q + M_w_dot)       0      ] [ q ]
-[ th_dot]   [  0     0         1                0      ] [ th]
-
-Where:
-M_u     = M_u_raw + M_w_dot * Z_u
-M_w     = M_w_raw + M_w_dot * Z_w
-M_q_tot = M_q     + M_w_dot * (u0 + Z_q)
-
-*/
-
-/*
-Unicode Ver:
-
-┌ ̇u ┐   ┌ X_u   X_w   X_q - w₀        -g·cos(θ₀) ┐ ┌ u ┐
-│ ̇w │   │ Z_u   Z_w   Z_q + u₀        -g·sin(θ₀) │ │ w │
-│ ̇q │ = │ M_u*  M_w*  M_q*         -M_ẇ·g·sin(θ₀)│ │ q │
-└ ̇θ ┘   └  0     0       1                 0     ┘ └ θ ┘
-
-*Note: M_u*, M_w*, and M_q* include the standard M_ẇ correction terms:
- M_u* = M_u + M_ẇ·Z_u
- M_w* = M_w + M_ẇ·Z_w
- M_q* = M_q + M_ẇ·(u₀ + Z_q)
-
-*/

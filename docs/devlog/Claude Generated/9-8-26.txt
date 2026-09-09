@@ -1,0 +1,69 @@
+DEVLOG — 2026-09-08 (Claude-generated session log)
+====================================================
+
+Focus: verify M1; build + review + clean the M2 physics core skeleton.
+
+WHAT HAPPENED
+-------------
+1. M1 handshake VERIFIED (was only mechanism-proven before).
+   - Two federates now discover each other and reflect a real Position exchange
+     ("Discovered Object ..." / "Reflected Position ...") with a clean lifecycle.
+   - Root cause of the earlier no-exchange: no start barrier + short unsynchronized
+     loops. Fix: a waitForUser() barrier (gated behind a "wait" argv so CI's
+     non-interactive smoke run doesn't block) + longer loop. main.cpp was also
+     missing the arg wiring (added). The proper long-term barrier is HLA SYNC
+     POINTS (register/announce/achieve/synchronized) -- deferred to time-mgmt.
+
+2. M2 physics core skeleton laid down (RTI-free, ADR-0016 composition-first).
+   - New/filled: DynamicsModel (pure interface), LinearLongitudinal (stub +
+     A-matrix reference), Integrator (rk4Step/eulerStep), Aircraft, World (owns
+     aircraft, ghosts, sectors; advance = integrate + resolveCollisions seam),
+     Sector (AABB + contains/inHalo), Collision (no-op seam + 3-tier staging doc),
+     AircraftParams, State/StateDot. Wired into src/core/CMakeLists.txt.
+
+3. User drafted the integrator + started the flight model; reviewed and cleaned:
+   - StateDot kept as a DISTINCT type (not `using StateDot = State`) for physics
+     type-safety -- good call. mass moved out of State into AircraftParams.
+   - Math.hpp: added component-wise Quat + and Quat*scalar, labelled
+     "integration only, NOT quaternion algebra" (kept separate from Hamilton
+     product / rotation). State.hpp: added the missing StateDot + StateDot.
+   - Integrator fixes: RK4 k4 now uses FULL dt (was half_dt -- a real bug);
+     missing semicolon; #include <cmath>. renormAtt + euler/rk4 structure were
+     otherwise sound.
+
+4. Scope correction: the WIND / STORM was being built inside DynamicsModel.
+   - Storm is CUT from the MVP (charter Scope; ADR-0010). Pulled the wind out:
+     DynamicsModel reverted to a PURE abstract interface; the field code
+     (VecField, gravity, simpleTornado) PARKED in a new src/core/WindField.hpp
+     (header-only, included by nothing) with the user's comments preserved and a
+     height-guard fix. When the storm returns, wind enters at ONE point
+     (airspeed = inertial - wind, before the aero) as a DISTURBANCE input, never
+     in the interface.
+
+5. State-space clarification (for the flight model): ẋ = A·x + B·u + E·w.
+   - A = plant (has gravity; its eigenvalues ARE the modes -> M2-6 uses A alone).
+   - B = control (elevator/throttle) -> needed at M3 for the formation law.
+   - C = output (≈ identity for us, rarely written). Wind is NOT A/B/C: it is the
+     E·w disturbance channel (post-MVP with the storm).
+
+DOC SYNC
+--------
+- Charter progress note refreshed (M1 verified; M2 in progress; wind parked).
+  Timeline v3 (Sep 7) still holds; no v4 needed yet (flight model may spill to
+  Sep 9 -- a within-phase slip, not a re-forecast).
+- Memory: added a current-state pickup pointer; mvp-coupling memory already
+  carries the space-partition-retained + collision-staging decision.
+
+OPEN / NEXT (pick up here)
+--------------------------
+- IMMEDIATE (M2 core): implement LinearLongitudinal::derivative from the A-matrix
+  already pasted in LinearLongitudinal.cpp -- reduce full State to [u, w, q, theta]
+  about trim, apply the 4x4, expand rates back into StateDot (M2-4). Source the
+  stability-derivative set from a published/textbook example (ADR-0009), e.g.
+  Nelson's business-jet worked example. Put the numbers in AircraftParams.
+- THEN: eigenvalue mode-check vs published short-period/phugoid (ω, ζ) -- M2-6,
+  the load-bearing physics V&V. THEN: World::advance -> federate publishes real
+  State instead of the dummy ramp (M2-8).
+- Build note: run `cmake --build build` from /mnt -- the cleaned core should be
+  green (motion is zero until derivative is implemented; that's expected).
+- Behind schedule by ~2 days; v3 holds Sep 13 only with collision cut to post-MVP.

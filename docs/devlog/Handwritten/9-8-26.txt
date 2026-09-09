@@ -1,0 +1,9 @@
+Flight model types:
+
+Nelson business-jet worked example? Claude recommended.
+Nelson, Flight Stability & Automatic Control - the canonical longitudinal worked example, with published short-period and phugoid omega, zeta.
+
+Etkin & Reid Dynamics of Flight
+B747 / standard-transport derivative set from Etkin & Reid. Heavier and less clean than above.
+
+Correcting the LLM's "in-halo" check to be OR instead of AND.

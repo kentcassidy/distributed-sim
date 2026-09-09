@@ -35,8 +35,12 @@ public:
     std::vector<Ghost>&          ghosts()        { return ghosts_; }
     const std::vector<Sector>&   sectors() const { return sectors_; }
 
-    // TODO(worldspace): outOfSector() -> owned aircraft that left their sector
-    // (handoff candidates); haloGhosts() -> ghosts inside a sector's halo band.
+    // Owned aircraft that have left EVERY sector this federate owns -- the handoff
+    // candidates the federate migrates. Deterministic (owned_ order). Empty when no
+    // sectors are configured (no partitioning => nothing to hand off).
+    std::vector<EntityId> outOfSector() const;
+
+    // TODO(worldspace): haloGhosts() -> ghosts inside a sector's halo band.
 
 private:
     std::vector<Aircraft> owned_;    // this federate's authoritative aircraft
