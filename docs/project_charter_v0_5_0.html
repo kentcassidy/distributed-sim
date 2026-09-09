@@ -216,12 +216,12 @@ td code{font-size:11.5px}
   <div id="tl-ck"></div>
 
   <div class="note ok">
-    <span class="lbl">Progress &mdash; M1 verified (Sep 7); M2 flight model in progress (Sep 8)</span>
+    <span class="lbl">Progress &mdash; M1 &amp; M2 done; scope reframed; constructive partition-invariance path next (Sep 9)</span>
     <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored; the
     <code>src/</code> skeleton; sector/controller architecture (ADRs&nbsp;0015&ndash;0016); and the
     <strong>M1 RTI handshake &mdash; verified</strong>: two federates discover and reflect a real attribute exchange with
     a clean lifecycle (hand-authored FOM in <code>.fed</code> form, ADR-0017).
-    <strong>M2 in progress:</strong> the RTI-free physics core is laid down &mdash; <code>State</code>/<code>StateDot</code>
+    <strong>M2 &mdash; done (as deterministic filler):</strong> the RTI-free physics core is laid down &mdash; <code>State</code>/<code>StateDot</code>
     with type-safe operators, RK4&nbsp;+&nbsp;Euler integrators (quaternion renormalization), and the
     <code>Aircraft</code>/<code>World</code>/<code>Sector</code>/<code>Collision</code> seams. The wind/storm field is
     parked post-MVP (<code>WindField.hpp</code>; charter Scope, ADR-0010) and <code>DynamicsModel</code> is a clean pure
@@ -292,12 +292,31 @@ td code{font-size:11.5px}
           {day:10, text:"If conservative time management + the sync barrier aren't working, fall back to best-effort receive-order and ship with honest limits."},
           {day:12, text:"Co-located-vs-split match plus one delay point &mdash; minimum shippable (unchanged)."}
         ]
+      },
+      { id:"v4", label:"Reframe", when:"Sep 9", day:9,
+        note:"Scope clarified: this is a distributed-SYSTEMS proof of concept. The flight physics is deterministic FILLER (made-up coefficients; the published-mode check is backlogged -- ADR-0005). The MVP result is CONSTRUCTIVE, bit-exact partition invariance of TRUTH (ADR-0019): independent aircraft, partitioned by config, each federate reports its exact truth to the controller, and K=1 (co-located) vs K=2 (split) are compared bit-for-bit. Formation-keeping + ghosts + dead reckoning + latency move to a separate LIVE experiment, AFTER the constructive result. Space-partition is retained; the invariance's teeth are in handoff/migration, so that is where the determinism work goes. Logging/viz seam is NDJSON + a browser viewer (ADR-0018), off the critical path.",
+        standing:"through the flight model -- derivative (deterministic filler), RK4/Euler, World::advance + Sector::contains/outOfSector; the aircraft federate publishes real State and logs NDJSON per step",
+        marks:[{day:9,label:"½"},{day:10,label:"½"},{day:11,label:"½"}],
+        phases:[
+          {name:"Bootstrap",              s:1,e:3,  status:"done", focus:"Container, Portico, CMake, src/ skeleton, ADRs.", done:"Federate builds and joins; skeleton green."},
+          {name:"RTI handshake",          s:4,e:7,  status:"done", focus:"FOM (.fed); one-attribute pub/sub; discover/reflect; clean lifecycle. ADR-0017.", done:"Two federates exchange an attribute."},
+          {name:"Flight model",           s:7,e:9,  status:"done", focus:"Linearized longitudinal as deterministic filler; RK4; publish real State; NDJSON log.", done:"Federate integrates + publishes real state."},
+          {name:"Partition by config",    s:9,e:10, focus:"Federate owns a config-driven LIST of aircraft from a shared scenario (id-&gt;IC); static assignment; truth to the controller.", done:"One federate owns both aircraft (K=1) or one each (K=2), same ICs."},
+          {name:"Constructive invariance",s:10,e:11,focus:"K=1 vs K=2 truth compared bit-for-bit; determinism (fixed dt / order / seed). The MVP result.", done:"Co-located and split truth match to the bit."},
+          {name:"Migration + viewer",     s:11,e:12,focus:"Handoff across sector seams (the invariance teeth); browser NDJSON viewer of the worldspace.", done:"Handed-off aircraft matches the never-handed-off run; worldspace visible."},
+          {name:"Package",                s:12,e:13,focus:"2-page V&amp;V writeup; finish ADRs; README; retrospective.", done:"A stranger can clone, build, reproduce."}
+        ],
+        checks:[
+          {day:10, text:"Partition-by-config running -- one federate owns both aircraft, or one each, from the same scenario."},
+          {day:11, text:"K=1 vs K=2 truth match bit-for-bit at zero impairment -- the minimum shippable constructive result."},
+          {day:12, text:"If migration/handoff isn't done, ship the static-assignment invariance result and note migration as the next step."}
+        ]
       }
     ];
 
     // CURRENT actual project status, by phase name. Update as reality lands;
     // the ghost on every PREVIOUS timeline is derived from this single source.
-    var STATUS = { done:["Bootstrap","RTI handshake"], active:["Flight model"] };
+    var STATUS = { done:["Bootstrap","RTI handshake","Flight model"], active:["Partition by config"] };
     function statusOf(name){
       if(STATUS.done.indexOf(name)>=0) return 'done';
       if(STATUS.active.indexOf(name)>=0) return 'active';
@@ -1338,7 +1357,7 @@ const ROADMAP_DATA = {
   principle: "One validated model core, wrapped by many drivers. Consume the middleware; own your own physics; report distributions, not single runs.",
   milestones: [
     {
-      id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "active",
+      id: "M0", codename: "Bootstrap", title: "Apparatus \u2014 Day 1", status: "done",
       blurb: "One sitting, before any C++ is written. Repo, board, ADR set, journal, CI skeleton, and the container/netem scaffolding. Process added later never gets added. Mostly done as of Sep 3 \u2014 the container, vendored RTI, CMake build, and src/ skeleton all land; CI, board, and issue-decomposition are the remaining tail (the session journal lives in docs/devlog/).",
       children: [
         { label: "Repo, licence, .gitignore", status: "done" },
@@ -1359,7 +1378,7 @@ const ROADMAP_DATA = {
       ]
     },
     {
-      id: "M1", codename: "Handshake", title: "RTI Bring-up \u2014 Week 1", status: "next",
+      id: "M1", codename: "Handshake", title: "RTI Bring-up \u2014 Week 1", status: "done",
       blurb: "Learn the interface against a model too trivial to be the cause of a bug. Everything here is about the RTI; nothing is about physics.",
       children: [
         { label: "Author the FOM by hand" },
@@ -1376,7 +1395,7 @@ const ROADMAP_DATA = {
       ]
     },
     {
-      id: "M2", codename: "Core", title: "Model Core + Storm \u2014 Weeks 1\u20132", status: "planned",
+      id: "M2", codename: "Core", title: "Model Core + Storm \u2014 Weeks 1\u20132", status: "done",
       blurb: "Off the critical path: no RTI, no clock. The heart of the project \u2014 physics that both drivers share. Verified standalone before anything is wrapped.",
       children: [
         { label: "Rigid-body state + RK4, advance(dt) interface" },
@@ -1411,7 +1430,7 @@ const ROADMAP_DATA = {
       ]
     },
     {
-      id: "M4", codename: "Worldspace", title: "Federated Driver \u2014 Weeks 2\u20133", status: "planned",
+      id: "M4", codename: "Worldspace", title: "Federated Driver \u2014 Weeks 2\u20133", status: "next",
       blurb: "The distributed mode over the same core, space-partitioned (ADR-0015): each federate owns a sector; a controller federate assigns sectors from config; aircraft migrate across seams. Ghosts, halo bands, dead reckoning, time management. Needs M1 and M2. The milestone most likely to overrun \u2014 protect it; take slack from M2/M3.",
       children: [
         { label: "Controller federate assigns sectors from config" },
