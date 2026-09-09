@@ -225,9 +225,14 @@ td code{font-size:11.5px}
     with type-safe operators, RK4&nbsp;+&nbsp;Euler integrators (quaternion renormalization), and the
     <code>Aircraft</code>/<code>World</code>/<code>Sector</code>/<code>Collision</code> seams. The wind/storm field is
     parked post-MVP (<code>WindField.hpp</code>; charter Scope, ADR-0010) and <code>DynamicsModel</code> is a clean pure
-    interface. <strong>Next:</strong> implement <code>LinearLongitudinal::derivative</code> from the published
-    longitudinal A-matrix (reduce <code>State</code>&rarr;<code>[u,w,q,&theta;]</code>, apply, expand), then the
-    eigenvalue mode-check (M2-6), then wire <code>world.advance</code> into the federate to publish real state.
+    interface. <strong>Next:</strong> the <em>constructive</em> partition-invariance path &mdash; each federate
+    reports its exact truth to the controller over the RTI, and the assembled result is compared bit-for-bit
+    across partitionings (K=1 vs K=2), on the determinism scaffolding (conservative time; fixed dt / order /
+    seed) that makes the match possible. <code>LinearLongitudinal::derivative</code> is now implemented as
+    <strong>deterministic stable filler</strong> (made-up coefficients &mdash; fidelity is out of scope for this
+    systems PoC), and <code>World::advance</code> already publishes real state. The <strong>eigenvalue
+    mode-check is backlogged</strong>: with invented coefficients there is no published truth to verify against
+    (ADR-0005). Ghosts + dead reckoning are the later <em>Live</em> experiment, not this path.
     Collision stays the immediate post-MVP feature (ADR-0007). Session journal in <code>docs/devlog/</code>.
   </div>
 
@@ -443,7 +448,7 @@ td code{font-size:11.5px}
     <div class="gcell keep">
       <div class="gt">Load-bearing &mdash; build first</div>
       <p>C++ model core, entity-agnostic (owns a <em>list</em> of aircraft, partitioned by config) &middot;
-      linearized longitudinal model, verified against published modes &middot; two aircraft + logger on Portico
+      linearized longitudinal model (deterministic stable filler; mode-verification backlogged &mdash; ADR-0005) &middot; two aircraft + logger on Portico
       &middot; hand-authored FOM &middot; conservative time management &middot; one dead-reckoning algo (constant
       velocity, fixed threshold) &middot; formation coupling on the ghost &middot; partition-invariance V&amp;V
       &middot; one latency sweep &middot; public repo, ~6&ndash;7 ADRs, journal, 2-page V&amp;V writeup.</p>

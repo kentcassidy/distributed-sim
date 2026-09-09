@@ -6,4 +6,85 @@ Nelson, Flight Stability & Automatic Control - the canonical longitudinal worked
 Etkin & Reid Dynamics of Flight
 B747 / standard-transport derivative set from Etkin & Reid. Heavier and less clean than above.
 
-Correcting the LLM's "in-halo" check to be OR instead of AND.
+
+  The one-line summary
+
+  The federate no longer fakes motion. It now owns a real World with one aircraft, calls world_.advance(dt) every step, and publishes that aircraft's actual integrated position. As a bonus it writes an NDJSON frame per step for the viewer. Your derivative → RK4 → World
+  chain is now driving the federation.
+
+  The new members (and a real C++ subtlety)
+
+  In the header:
+
+  LinearLongitudinal   model_;   // declared BEFORE world_ on purpose
+  World                world_;
+  ofstream             log_;
+  wstring              federateName_;
+
+  Recall that an Aircraft holds a borrowed const DynamicsModel* — it points at a model it doesn't own. Here that model is model_, a federate member. So model_ must still be alive whenever the aircraft (inside world_) are alive. C++ destroys members in reverse
+  declaration order, so declaring model_ before world_ means world_ (and its aircraft) die first, then model_. If I'd written them the other way round, the model would be destroyed while aircraft still pointed at it — a dangling pointer at shutdown. Order matters here,
+  and the comment flags it so nobody "tidies" the members later and breaks it.
+
+  initWorld — one-time setup
+
+  This runs once, right after we register with the RTI:
+
+  unsigned int tail = 1;
+  wchar_t c = federateName.empty() ? L'1' : federateName.back();
+  if (c >= L'0' && c <= L'9') tail = (unsigned int)(c - L'0');
+  Both federates run identical code, so I need something to make their aircraft distinct. I read the last character of the federate name — aircraft-1 → 1, aircraft-2 → 2 — and use it as the entity id and a lane offset. Crude but deterministic and enough for the
+  two-plane demo. (This is exactly the kind of thing the controller/config will do properly later.)
+
+  State s0;
+  s0.position = Vec3(0.0, tail * 500.0, 0.0);
+  s0.velocity = Vec3(params.trimSpeed, 0.0, 0.0);
+  s0.attitude = Quat(0.0, 0.02, 0.0, 1.0);
+  The initial condition. Position is offset on y by the lane number (aircraft-1 at y=500, aircraft-2 at y=1000). Velocity is set to exactly trimSpeed down +x — remember your reduction computes u = velocity.x - trimSpeed, so starting at trim means the perturbations u, w
+  begin at zero, which is the clean "on the operating point" start. The tiny pitch (attitude.y = 0.02, about 0.04 rad) is a small nudge off equilibrium so the linear dynamics actually do something visible — it's the proof that RK4 and your derivative are really running
+  rather than the plane sitting still.
+
+  world_.owned().push_back(Aircraft(params.id, params, &model_));
+  world_.owned().back().state() = s0;
+  Construct the aircraft (borrowing &model_), drop it into the world's owned list, then write its starting state through the mutable state() accessor. Two lines because the constructor doesn't take an initial state — it default-constructs, and we set the IC afterward.
+
+  log_.open(fname + ".ndjson");
+  log_ << setprecision(9);
+  Open this federate's NDJSON file and bump the numeric precision (the default 6 significant figures is a bit coarse). Each federate writes its own file; the viewer merges them by timestamp.
+
+  step — the real loop body
+
+  world_.advance(dt);
+  const State& s = world_.owned()[0].state();
+  Advance the physics one step, then grab a reference to the (now-updated) state. This is the line that replaced the dummy ramp — the position is now whatever the integrator produced.
+
+  attributes[this->positionHandle] = encodeVec3(s.position);
+  rtiamb->updateAttributeValues(this->ownAircraft, attributes, tag);
+  Encode the real position and publish it — unchanged plumbing, real data.
+
+  log_ << "{\"t\":" << simTime << ",\"aircraft\":[{\"id\":" << id
+       << ",\"pos\":[...]" << ",\"vel\":[...]" << ",\"quat\":[...]}]}" << "\n";
+  And the NDJSON frame — the schema we agreed on, hand-formatted (no library). Note it logs the full state (pos + vel + quat) even though only Position goes on the wire.
+
+  The deliberate split: wire vs. log
+
+  Worth calling out because it looks inconsistent at first glance: Position only goes over the RTI, but the NDJSON logs everything. That's intentional. Getting Velocity and Orientation onto the wire means extending the publish/subscribe set, adding a quaternion encoder,
+  and decoding them into the ghost on the receiving side — that's the next increment (it's what dead reckoning needs). This increment keeps the working handshake untouched and just makes its payload real. The viewer, meanwhile, gets full local state for free since it
+  reads the file, not the wire.
+
+  Running it (in your container)
+
+  Rebuild, then the same two-terminal pattern you used for M1, from the repo root:
+
+  ./aircraft_federate aircraft-1 wait      # registers, holds at the barrier
+  ./aircraft_federate aircraft-2 wait      # registers, holds at the barrier
+  # press ENTER in each
+
+  What to expect: two planes cruising along +x in parallel lanes (y=500 and y=1000), with a gentle bob from the initial pitch. You'll get aircraft-1.ndjson and aircraft-2.ndjson in the working directory — that's your viewer's first real data. The motion is intentionally
+  gentle (filler physics); if you want a livelier demo later, a bigger initial pitch or a longer run dials it up.
+
+  Where this leaves the MVP
+
+  You now have real physics published through the RTI and NDJSON on disk — the backbone of the whole thing. The remaining pieces to a full partition-invariance result: (1) put Velocity/Orientation on the wire + decode them into the ghost, (2) the co-located-vs-split
+  comparison harness, and (3) the browser viewer over the NDJSON.
+
+  Want me to take the ghost/dead-reckoning increment next, or pivot to the browser viewer so you can actually see these two .ndjson files moving?

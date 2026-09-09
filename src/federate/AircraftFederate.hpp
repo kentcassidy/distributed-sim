@@ -2,9 +2,12 @@
 
 #include <memory>
 #include <string>
+#include <fstream>
 #include <RTI/RTI1516.h>
 #include "AircraftFedAmb.hpp"
 #include "Encoding.hpp"
+#include "../core/World.hpp"
+#include "../core/LinearLongitudinal.hpp"
 
 using namespace rti1516e;
 using namespace std;
@@ -28,7 +31,8 @@ private:
     void publishAndSubscribe();
     void registerOwnAircraft();
     void waitForUser();          // demo barrier; skipped in non-interactive (CI) runs
-    void step(double simTime);
+    void initWorld(wstring federateName);   // build this federate's physics + open the NDJSON log
+    void step(double simTime, double dt);
     void resignAndDestroy();
 
     unique_ptr<RTIambassador> rtiamb;   // ctor via factory.createRTIambassador()
@@ -44,4 +48,11 @@ private:
     AttributeHandle   orientationHandle;
 
     ObjectInstanceHandle ownAircraft;   // the single aircraft this federate owns
+
+    // dff_core physics. model_ is declared BEFORE world_ so it OUTLIVES the aircraft
+    // that borrow it (class members are destroyed in reverse declaration order).
+    LinearLongitudinal   model_;
+    World                world_;
+    ofstream             log_;            // NDJSON frames for the browser viewer
+    wstring              federateName_;
 };

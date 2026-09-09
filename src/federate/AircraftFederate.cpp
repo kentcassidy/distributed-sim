@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <RTI/RTI1516.h>
 #include <RTI/RTIambassadorFactory.h>
@@ -26,6 +27,7 @@ void AircraftFederate::run(wstring federateName, bool interactive) {
     cacheHandles();
     publishAndSubscribe();
     registerOwnAircraft();
+    initWorld(federateName);
 
     // Barrier for the two-federate demo: hold here until BOTH federates have
     // registered, so their publish loops overlap and discovery/reflection cross.
@@ -33,10 +35,12 @@ void AircraftFederate::run(wstring federateName, bool interactive) {
     if (interactive)
         waitForUser();
 
-    // Main loop: no time management yet. Publish our Position each tick, then
-    // evoke callbacks so the RTI delivers the OTHER federate's discover/reflect.
-    for (int i = 0; i < 50; i++) {
-        step(i * 1.0);
+    // Main loop: no time management yet. Advance the physics by dt, publish our real
+    // Position, then evoke callbacks so the RTI delivers the OTHER federate's
+    // discover/reflect.
+    const double dt = 0.1;
+    for (int i = 0; i < 100; i++) {
+        step(i * dt, dt);
         rtiamb->evokeMultipleCallbacks(0.1, 0.2);
     }
 
@@ -135,20 +139,65 @@ void AircraftFederate::waitForUser() {
 }
 
 ////////////////////
-// 7. One step: dummy kinematics + publish Position
+// 6b. Build this federate's physics world (one owned aircraft) + open the log
 //////////
-void AircraftFederate::step(double simTime) {
-    // Placeholder until dff_core's flight model lands: drift along +x over time.
-    Vec3 position(simTime * 10.0, 0.0, 0.0);
+void AircraftFederate::initWorld(wstring federateName) {
+    this->federateName_ = federateName;
 
+    // One aircraft per federate for the MVP. Derive a stable id + a lane offset from
+    // the last character of the name (aircraft-1 -> 1) so the two federates' planes
+    // fly parallel, visibly distinct lanes.
+    unsigned int tail = 1;
+    wchar_t c = federateName.empty() ? L'1' : federateName.back();
+    if (c >= L'0' && c <= L'9') tail = (unsigned int)(c - L'0');
+
+    AircraftParams params;          // arbitrary-but-stable filler (see AircraftParams.hpp)
+    params.id = tail;
+
+    // Cruise straight down +x at trim speed (so the u,w perturbations start at 0), in
+    // a lane offset on y, with a small initial pitch so the linear dynamics visibly
+    // oscillate -- proof the integrator + derivative are actually running.
+    State s0;
+    s0.position = Vec3(0.0, tail * 500.0, 0.0);
+    s0.velocity = Vec3(params.trimSpeed, 0.0, 0.0);
+    s0.attitude = Quat(0.0, 0.02, 0.0, 1.0);   // ~0.04 rad pitch; renormalized on first step
+
+    world_.owned().push_back(Aircraft(params.id, params, &model_));
+    world_.owned().back().state() = s0;
+
+    // NDJSON viewer log, one file per federate (the viewer merges by timestamp).
+    string fname(federateName.begin(), federateName.end());
+    log_.open(fname + ".ndjson");
+    log_ << setprecision(9);
+
+    wcout << L"World ready: 1 aircraft, id=" << tail
+          << L", logging to " << federateName << L".ndjson" << endl;
+}
+
+////////////////////
+// 7. One step: advance real physics, publish Position, log an NDJSON frame
+//////////
+void AircraftFederate::step(double simTime, double dt) {
+    world_.advance(dt);                                 // RK4 over the owned aircraft
+    const State& s = world_.owned()[0].state();
+
+    // Put the REAL position on the wire (replaces the old dummy ramp). Velocity and
+    // Orientation join the published set in the next increment (ghost + dead reckoning).
     AttributeHandleValueMap attributes;
-    attributes[this->positionHandle] = encodeVec3(position);
-
+    attributes[this->positionHandle] = encodeVec3(s.position);
     VariableLengthData tag((void*)"pos", 4);
     rtiamb->updateAttributeValues(this->ownAircraft, attributes, tag);
 
-    wcout << L"Published Position = (" << position.x << L", "
-          << position.y << L", " << position.z << L")" << endl;
+    // NDJSON frame for the viewer: this federate's full local state (pos + vel + quat).
+    unsigned int id = world_.owned()[0].id();
+    log_ << "{\"t\":" << simTime
+         << ",\"aircraft\":[{\"id\":" << id
+         << ",\"pos\":["  << s.position.x << "," << s.position.y << "," << s.position.z << "]"
+         << ",\"vel\":["  << s.velocity.x << "," << s.velocity.y << "," << s.velocity.z << "]"
+         << ",\"quat\":[" << s.attitude.x << "," << s.attitude.y << "," << s.attitude.z << "," << s.attitude.w << "]}]"
+         << "}\n";
+
+    wcout << L"t=" << simTime << L"  Position = " << s.position << endl;
 }
 
 ////////////////////

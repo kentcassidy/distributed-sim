@@ -14,7 +14,7 @@ ADR supersedes it, and the superseded record is marked accordingly.
 | [0002](0002-public-repository.md) | Public repository from the first commit | Accepted | — |
 | [0003](0003-language-discipline.md) | C++ for model/federates/ensemble; scripting only for plots | Accepted | — |
 | [0004](0004-project-framing.md) | Frame as validation study, present as result | Accepted | — |
-| [0005](0005-model-fidelity.md) | Linearized longitudinal model as fidelity floor | Proposed | M2 |
+| [0005](0005-model-fidelity.md) | Linearized longitudinal model as deterministic filler (fidelity out of scope) | Accepted | — |
 | [0006](0006-model-core-and-drivers.md) | Separate model core from execution drivers | Accepted | — |
 | [0007](0007-coupled-formation-scenario.md) | Couple the aircraft via formation-keeping (collision is post-MVP) | Accepted | — |
 | [0008](0008-latency-injection.md) | Inject impairment at the network layer (tc netem) | Proposed | M4 |
@@ -27,6 +27,8 @@ ADR supersedes it, and the superseded record is marked accordingly.
 | [0015](0015-space-partitioned-placement-and-controller.md) | Space-partitioned placement with a controller federate | Accepted | — |
 | [0016](0016-core-object-model.md) | Core object model — composition-first, shallow interfaces | Accepted | — |
 | [0017](0017-fom-format-fed.md) | Author the FOM in HLA 1.3 (.fed) format, not 1516e XML | Accepted | — |
+| [0018](0018-ndjson-logging-and-viewer.md) | NDJSON logging seam + browser viewer (refines 0003) | Accepted | — |
+| [0019](0019-constructive-partition-invariance.md) | Constructive bit-exact partition invariance is the V&V spine; Live degradation separate | Accepted | — |
 
 **Status key.** *Proposed* — the decision is recorded but not yet locked; it
 moves to *Accepted* when resolved at or before the noted milestone. *Accepted* —

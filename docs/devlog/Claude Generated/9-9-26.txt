@@ -1,0 +1,73 @@
+DEVLOG — 2026-09-09 (Claude-generated session log)
+====================================================
+
+Focus: scope reconciliation + safeguarding docs. A session heavy on the AGENT
+misreading intent; the code delta is small, the CLARITY delta is the point.
+
+WHAT HAPPENED
+-------------
+1. Scope was corrected by the user (twice). Recorded so it does not recur:
+   - This is a DISTRIBUTED-SYSTEMS proof of concept. The flight physics is
+     DISPOSABLE STABLE FILLER, not a fidelity exercise. Made-up, stable,
+     deterministic coefficients are fine and intended.
+   - The published-mode eigenvalue check (M2-6 / ADR-0005 / Success Criterion #3)
+     is BACKLOGGED. With invented numbers there is no external truth to verify
+     against; partition invariance is a property of DETERMINISM, not fidelity.
+   - V&V actually performed = (A) basic stability + (B) partition invariance.
+
+2. The TWO EXPERIMENTS were disentangled (the agent had conflated them):
+   - CONSTRUCTIVE (the MVP core): fully deterministic, BIT-EXACT. Every federate
+     computes exact truth every step and reports it to the CONTROLLER over the RTI
+     (as-it-happens, or flushed per sector -- TBD). Assemble the truth; the result
+     must be identical no matter how the work is partitioned (K=1 vs K=2). Ghosts
+     and dead reckoning are NOT in this path. Zero variation, not a threshold.
+   - LIVE (later): inject latency; each side dead-reckons GHOSTS of others and
+     accepts bounded error; measure graceful degradation. Ghosts are load-bearing
+     ONLY here. This is the charter's "controlled breakdown".
+   The charter already states this ("two claims, in order") -- the agent had
+   substituted claim #2 for claim #1.
+
+3. Code delta (small, all reviewed with the user):
+   - Sector::contains (AABB point test) + Sector::inHalo (shell band) implemented.
+   - World::outOfSector() added -- pure detector of owned aircraft outside every
+     owned sector (handoff candidates); deterministic order; empty if no sectors.
+   - Aircraft federate now owns a World + LinearLongitudinal, integrates ONE real
+     aircraft (cruise IC + small pitch), and publishes REAL Position (dummy ramp
+     removed). Emits NDJSON per step (own truth: pos/vel/quat) to <name>.ndjson.
+     model_ declared before world_ so it outlives the aircraft that borrow it.
+
+4. Logging/visualization seam DECIDED: NDJSON (not CSV). Browser Canvas 2D viewer;
+   replay first, optional realtime via SSE. C++ only emits; no web/DB in the
+   federate. Off the critical path. (Memory: viz-logging-ndjson-pipeline.)
+
+DOC SYNC
+--------
+- NEW: /CLAUDE.md -- root priming/safeguarding doc. Read-order, the two-experiments
+  distinction, current scope decisions, and "how to work here" (don't build on the
+  host; don't chase fidelity; don't assume; explain code patiently).
+- Memory: added systems-poc-physics-is-filler + viz-logging-ndjson-pipeline;
+  refreshed current-state-pickup.
+- CHARTER: SURGICAL fixes applied (Scope tab only) -- the stale progress-note "Next"
+  now describes the constructive partition-invariance path; the "load-bearing" list
+  marks the linearized model as deterministic filler w/ mode-verification backlogged.
+  Success Criterion #3, M2 exit stamps, and the Experiments V&V table (other/full-
+  vision tabs) were LEFT as-is by choice; CLAUDE.md + the ADRs carry the deltas.
+- ADRs (checkpoint, immutability-respecting):
+  * 0005 (was Proposed, resolve-by M2) RESOLVED in place -> Accepted: linearized
+    longitudinal model kept as SHAPE but deterministic FILLER; fidelity out of scope;
+    published-mode verification dropped.
+  * NEW 0018: NDJSON logging seam + browser viewer (refines 0003's CSV consequence;
+    0003 left untouched, Accepted).
+  * NEW 0019: constructive bit-exact partition invariance is the V&V spine; Live
+    (ghost/DR/latency) degradation is a separate later experiment.
+  * README index table updated for all three.
+
+OPEN / NEXT (pick up here)
+--------------------------
+- RESOLVE FIRST: is there LIVE COUPLING between aircraft during the constructive
+  run? (Decides stream-every-step vs flush-per-sector for truth reporting.)
+- Then the CONSTRUCTIVE path: truth -> controller over the RTI; the K=1-vs-K=2
+  truth diff; and the determinism scaffolding (conservative time management,
+  fixed dt / order / seed) that makes a bit-exact match possible.
+- Ghosts + dead reckoning + latency = the LIVE experiment, AFTER the constructive
+  result lands. The browser NDJSON viewer is a parallel, off-critical-path task.
