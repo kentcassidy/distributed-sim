@@ -1,13 +1,13 @@
 <script setup>
-// The shell: loads sim_out, drives the viewport, and renders the control panel.
-// Playback time is owned by the SceneController; display + theme state live here and
-// are pushed to the scene through the Viewport's exposed methods / props.
+// Shell: loads sim_out, owns display + viewpoint state, and lays out one or more
+// viewports. Playback is a single shared clock (viewport/clock.js) advanced here and
+// read by every pane, so panes stay in sync. Display state flows to panes as PROPS.
 import { ref, reactive, shallowRef, onMounted, onBeforeUnmount, computed } from 'vue'
 import Viewport from './components/Viewport.vue'
 import { loadSimOut } from './data/loader.js'
+import { playback, advance } from './viewport/clock.js'
 import { DEFAULT_AIRCRAFT_SIZE, AIRCRAFT_SIZE_RANGE, hexToCss } from './config.js'
 
-const vp = ref(null)
 const timeline = shallowRef(null)
 const status = ref('Loading sim_out…')
 const aircraft = ref([])
@@ -19,112 +19,174 @@ const showGizmo = ref(true)
 const showUnits = ref(true)
 const isometric = ref(false)
 const showVectorField = ref(false)
+const projection = computed(() => (isometric.value ? 'isometric' : 'perspective'))
 
+// viewpoint
+const layout = ref('fused') // 'fused' | 'separated'
+const scope = ref('all') // 'all' | 'selected'
+const selected = reactive({}) // federate name -> bool
+const hovered = ref(null) // federate name currently hovered (panel or pane)
+
+// recenter (nonce props -> panes react without imperative refs)
+const recenterWorldNonce = ref(0)
+const recenterFed = ref({ name: null, n: 0 })
+
+// playback (mirrors the shared clock for the UI)
 const playing = ref(false)
 const currentT = ref(0)
 const duration = ref(0)
 const speed = ref(1)
 const SPEEDS = [0.25, 0.5, 1, 2, 4]
 
-const fedUi = reactive({}) // name -> {visible, highlighted, halo, size}
+const fedUi = reactive({}) // name -> {visible, highlight, halo, size}
 const acUi = reactive({}) // id -> {expanded, mode}
 
-// Keyboard transport. Guarded so typing in form controls (incl. the sliders) is
-// untouched. Space = play/pause; ←/→ = ±1 ms; Shift+←/→ = ±1 s; Ctrl+←/→ = ±5 s.
+const acModes = computed(() => {
+  const m = {}
+  for (const a of aircraft.value) m[a.id] = acUi[a.id]?.mode || 'show'
+  return m
+})
+
+// Panes: fused = one viewport; separated = a square-ish grid, one per federate, with any
+// leftover cells filled by a fused view. Ordering is by federate name (top-down, L→R).
+const panes = computed(() => {
+  const all = [...federates.value].sort((a, b) => a.name.localeCompare(b.name))
+  const chosen = scope.value === 'all' ? all : all.filter((f) => selected[f.name])
+  const fusedFilter = scope.value === 'all' || chosen.length === 0 ? null : chosen.map((f) => f.name)
+
+  if (layout.value === 'fused' || chosen.length <= 1) {
+    const single = layout.value === 'separated' && chosen.length === 1 ? chosen[0] : null
+    return {
+      cols: 1,
+      rows: 1,
+      cells: [
+        single
+          ? { key: 'f:' + single.name, filter: [single.name], label: single.name, css: single.css, federate: single.name, span: 1 }
+          : { key: 'fused', filter: fusedFilter, label: 'Fused', css: null, federate: null, span: 1 },
+      ],
+    }
+  }
+
+  const N = chosen.length
+  const cols = Math.ceil(Math.sqrt(N)) // vertical split first, then rows
+  const rows = Math.ceil(N / cols)
+  const cells = chosen.map((f) => ({ key: 'f:' + f.name, filter: [f.name], label: f.name, css: f.css, federate: f.name, span: 1 }))
+  const leftover = cols * rows - N
+  if (leftover > 0) {
+    cells.push({ key: 'fused-fill', filter: fusedFilter, label: 'Fused', css: null, federate: null, span: leftover })
+  }
+  return { cols, rows, cells }
+})
+
+// --- load + clock loop ---
+
+let rafId = 0
+function frame(now) {
+  advance(now)
+  currentT.value = playback.t
+  rafId = requestAnimationFrame(frame)
+}
+
 function onKey(e) {
   const tag = (e.target && e.target.tagName) || ''
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
   if (e.code === 'Space') {
     e.preventDefault()
-    vp.value?.togglePlay()
+    togglePlay()
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault()
     const dir = e.key === 'ArrowRight' ? 1 : -1
     const step = e.ctrlKey ? 5 : e.shiftKey ? 1 : 0.001
-    vp.value?.seek(currentT.value + dir * step)
+    seek(currentT.value + dir * step)
   }
 }
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
+  rafId = requestAnimationFrame(frame)
   try {
     const tl = await loadSimOut()
     for (const f of tl.federates) {
-      fedUi[f.name] = { visible: true, highlighted: false, halo: false, size: DEFAULT_AIRCRAFT_SIZE }
+      fedUi[f.name] = { visible: true, highlight: false, halo: false, size: DEFAULT_AIRCRAFT_SIZE }
+      selected[f.name] = true
     }
     for (const a of tl.aircraft) acUi[a.id] = { expanded: false, mode: 'show' }
     timeline.value = tl
-    duration.value = tl.duration
     aircraft.value = tl.aircraft.map((a) => ({ ...a, css: hexToCss(a.color) }))
     federates.value = tl.federates.map((f) => ({ ...f, css: hexToCss(f.color) }))
-    status.value = `${aircraft.value.length} aircraft · ${federates.value.length} federate file(s) · ${duration.value.toFixed(1)}s`
-    vp.value?.play()
+    playback.duration = tl.duration
+    playback.t = 0
+    playback.speed = 1
+    playback.playing = true
+    duration.value = tl.duration
+    playing.value = true
+    status.value = `${aircraft.value.length} aircraft · ${federates.value.length} federate(s) · ${tl.duration.toFixed(1)}s`
   } catch (e) {
     status.value = 'Could not load sim_out/: ' + e.message
     console.error(e)
   }
 })
 
-function onTime({ t, playing: p, duration: d }) {
-  currentT.value = t
-  playing.value = p
-  if (d) duration.value = d
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  cancelAnimationFrame(rafId)
+})
+
+// --- playback controls ---
+function togglePlay() {
+  playback.playing = !playback.playing
+  playing.value = playback.playing
+}
+function seek(t) {
+  playback.t = Math.max(0, Math.min(t, playback.duration || 0))
+  currentT.value = playback.t
+}
+function setSpeed(s) {
+  playback.speed = s
+  speed.value = s
 }
 const timeLabel = computed(() => `${currentT.value.toFixed(1)} / ${duration.value.toFixed(1)} s`)
 
+// --- world options ---
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+}
+function recenterWorld() {
+  recenterWorldNonce.value++
+}
+function recenterFederate(name) {
+  recenterFed.value = { name, n: recenterFed.value.n + 1 }
+}
+
+// --- federate handlers (mutate reactive state; panes react via props) ---
+function toggleFedVisible(name) {
+  fedUi[name].visible = !fedUi[name].visible
+}
+function toggleFedHighlight(name) {
+  fedUi[name].highlight = !fedUi[name].highlight
+}
+function toggleFedHalo(name) {
+  fedUi[name].halo = !fedUi[name].halo
+}
+function onFedSize(name, e) {
+  fedUi[name].size = Number(e.target.value)
+}
+
+// --- aircraft handlers ---
+function toggleExpand(id) {
+  acUi[id].expanded = !acUi[id].expanded
+}
+function setMode(id, mode) {
+  acUi[id].mode = mode
+}
+
+// --- live stats ---
 const liveById = computed(() => {
   const m = {}
   const tl = timeline.value
   if (tl) for (const s of tl.sample(currentT.value)) m[s.id] = s
   return m
 })
-
-// world options
-function toggleTheme() {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
-}
-function onGizmo(e) {
-  showGizmo.value = e.target.checked
-  vp.value?.setGizmoVisible(showGizmo.value)
-}
-function onUnits(e) {
-  showUnits.value = e.target.checked
-  vp.value?.setUnitsVisible(showUnits.value)
-}
-function onIso(e) {
-  isometric.value = e.target.checked
-  vp.value?.setProjection(isometric.value ? 'isometric' : 'perspective')
-}
-
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-// federate handlers
-function toggleFedVisible(name) {
-  fedUi[name].visible = !fedUi[name].visible
-  vp.value?.setFederateVisible(name, fedUi[name].visible)
-}
-function toggleFedHighlight(name) {
-  fedUi[name].highlighted = !fedUi[name].highlighted
-  vp.value?.setFederateHighlight(name, fedUi[name].highlighted)
-}
-function toggleFedHalo(name) {
-  fedUi[name].halo = !fedUi[name].halo
-  vp.value?.setFederateHalo(name, fedUi[name].halo)
-}
-function onFedSize(name, e) {
-  fedUi[name].size = Number(e.target.value)
-  vp.value?.setFederateSize(name, fedUi[name].size)
-}
-
-// aircraft handlers
-function toggleExpand(id) {
-  acUi[id].expanded = !acUi[id].expanded
-}
-function setMode(id, mode) {
-  acUi[id].mode = mode
-  vp.value?.setAircraftMode(id, mode)
-}
-
 const f1 = (n) => (n === undefined ? '—' : n.toFixed(1))
 const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
 </script>
@@ -135,44 +197,39 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
       <h1>DFF Viewer</h1>
       <p class="status">{{ status }}</p>
 
-      <!-- World / view options -->
       <section>
         <h2>World</h2>
-        <label class="opt">
-          <input type="checkbox" :checked="theme === 'dark'" @change="toggleTheme" /> Dark mode
-        </label>
-        <label class="opt">
-          <input type="checkbox" :checked="showGizmo" @change="onGizmo" /> Axis gizmo
-        </label>
-        <label class="opt">
-          <input type="checkbox" :checked="showUnits" @change="onUnits" /> Units
-        </label>
-        <label class="opt">
-          <input type="checkbox" :checked="isometric" @change="onIso" /> Isometric
-        </label>
-        <label class="opt">
-          <input type="checkbox" v-model="showVectorField" /> Vector field
-        </label>
-        <button class="wbtn" @click="vp?.recenterWorld()" title="fit the whole shared worldspace">
-          ⊕ Recenter world
-        </button>
+        <div class="lbl-row"><span class="mini">View</span></div>
+        <div class="seg small">
+          <button :class="{ on: layout === 'fused' }" @click="layout = 'fused'">Fused</button>
+          <button :class="{ on: layout === 'separated' }" @click="layout = 'separated'">Separated</button>
+        </div>
+        <div class="seg small">
+          <button :class="{ on: scope === 'all' }" @click="scope = 'all'">All</button>
+          <button :class="{ on: scope === 'selected' }" @click="scope = 'selected'">Selected</button>
+        </div>
+
+        <label class="opt"><input type="checkbox" :checked="theme === 'dark'" @change="toggleTheme" /> Dark mode</label>
+        <label class="opt"><input type="checkbox" :checked="showGizmo" @change="showGizmo = $event.target.checked" /> Axis gizmo</label>
+        <label class="opt"><input type="checkbox" :checked="showUnits" @change="showUnits = $event.target.checked" /> Units</label>
+        <label class="opt"><input type="checkbox" :checked="isometric" @change="isometric = $event.target.checked" /> Isometric</label>
+        <label class="opt"><input type="checkbox" v-model="showVectorField" /> Vector field</label>
+        <button class="wbtn" @click="recenterWorld" title="fit the whole shared worldspace">⊕ Recenter world</button>
       </section>
 
-      <!-- Federation control -->
       <section>
         <h2>Federation</h2>
-        <div v-for="f in federates" :key="f.name" class="fed">
+        <div v-for="f in federates" :key="f.name" class="fed" :class="{ hov: hovered === f.name }"
+          @mouseenter="hovered = f.name" @mouseleave="hovered = null">
           <div class="fed-top">
+            <input v-if="scope === 'selected'" type="checkbox" class="sel" :checked="selected[f.name]"
+              @change="selected[f.name] = $event.target.checked" title="include in viewpoint" />
             <span class="dot" :style="{ background: f.css }"></span>
             <span class="fed-name">{{ f.name }}</span>
-            <button class="chip" :class="{ on: fedUi[f.name].visible }" title="show / hide"
-              @click="toggleFedVisible(f.name)">{{ fedUi[f.name].visible ? '👁' : '🚫' }}</button>
-            <button class="chip" :class="{ on: fedUi[f.name].highlighted }" title="highlight bounds"
-              @click="toggleFedHighlight(f.name)">▢</button>
-            <button class="chip" :class="{ on: fedUi[f.name].halo }" title="halo"
-              @click="toggleFedHalo(f.name)">◌</button>
-            <button class="chip" title="recenter on this federate's local world"
-              @click="vp?.recenterFederate(f.name)">⊕</button>
+            <button class="chip" :class="{ on: fedUi[f.name].visible }" title="show / hide" @click="toggleFedVisible(f.name)">{{ fedUi[f.name].visible ? '👁' : '🚫' }}</button>
+            <button class="chip" :class="{ on: fedUi[f.name].highlight }" title="highlight bounds" @click="toggleFedHighlight(f.name)">▢</button>
+            <button class="chip" :class="{ on: fedUi[f.name].halo }" title="halo" @click="toggleFedHalo(f.name)">◌</button>
+            <button class="chip" title="recenter on this federate" @click="recenterFederate(f.name)">⊕</button>
           </div>
           <div class="fed-size">
             <span class="lbl">size</span>
@@ -184,7 +241,6 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
         <p v-if="!federates.length" class="placeholder">— none —</p>
       </section>
 
-      <!-- Per-aircraft containers -->
       <section>
         <h2>Aircraft</h2>
         <div v-for="a in aircraft" :key="a.id" class="ac">
@@ -206,7 +262,6 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
               <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
               <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
               <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>
-              <div><dt>alt (z)</dt><dd>{{ f1(liveById[a.id]?.pos[2]) }} m</dd></div>
             </dl>
           </div>
         </div>
@@ -215,16 +270,27 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
     </aside>
 
     <main class="stage">
-      <div class="viewport-wrap">
-        <Viewport ref="vp" :timeline="timeline" :theme="theme" @time="onTime" />
-        <div v-if="showVectorField" class="vf-note">No vector field / wind loaded</div>
+      <div class="panes" :style="{ '--cols': panes.cols, '--rows': panes.rows }">
+        <div v-for="cell in panes.cells" :key="cell.key" class="pane"
+          :style="{ gridColumn: cell.span > 1 ? 'span ' + cell.span : null, borderColor: hovered && hovered === cell.federate ? cell.css : 'var(--border)' }"
+          @mouseenter="hovered = cell.federate" @mouseleave="hovered = null">
+          <Viewport
+            :timeline="timeline" :theme="theme" :filter="cell.filter"
+            :aircraft-modes="acModes" :federate-states="fedUi"
+            :show-gizmo="showGizmo" :show-units="showUnits" :projection="projection"
+            :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
+          <div class="pane-title">
+            <span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}
+          </div>
+        </div>
       </div>
+
       <div class="timeline">
-        <button class="btn" @click="vp?.togglePlay()">{{ playing ? '❚❚' : '▶' }}</button>
+        <button class="btn" @click="togglePlay">{{ playing ? '❚❚' : '▶' }}</button>
         <input class="scrub" type="range" min="0" :max="duration || 0.0001" step="0.01"
-          :value="currentT" @input="vp?.seek(Number($event.target.value))" />
+          :value="currentT" @input="seek(Number($event.target.value))" />
         <span class="time">{{ timeLabel }}</span>
-        <select class="speed" :value="speed" @change="speed = Number($event.target.value); vp?.setSpeed(speed)">
+        <select class="speed" :value="speed" @change="setSpeed(Number($event.target.value))">
           <option v-for="s in SPEEDS" :key="s" :value="s">{{ s }}×</option>
         </select>
       </div>
@@ -234,20 +300,10 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
 
 <style scoped>
 .app {
-  /* layout */
-  --panel-w: 240px;
-  /* light theme (default) */
-  --bg: #ffffff;
-  --panel-bg: #fbfbfa;
-  --card-bg: #ffffff;
-  --border: #e6e4dd;
-  --line: #d8d6cf;
-  --text: #2c2c2a;
-  --muted: #8a887f;
-  --hover: #f6f5f1;
-  --chip-on: #eef1ee;
-  --chip-on-border: #9fbf9f;
-
+  --panel-w: 268px;
+  --bg: #ffffff; --panel-bg: #fbfbfa; --card-bg: #ffffff; --border: #e6e4dd;
+  --line: #d8d6cf; --text: #2c2c2a; --muted: #8a887f; --hover: #f6f5f1;
+  --chip-on: #eef1ee; --chip-on-border: #9fbf9f;
   display: grid;
   grid-template-columns: var(--panel-w) 1fr;
   height: 100vh;
@@ -256,34 +312,36 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
   background: var(--bg);
 }
 .app[data-theme='dark'] {
-  --bg: #1b1b1d;
-  --panel-bg: #202023;
-  --card-bg: #27272a;
-  --border: #38383c;
-  --line: #45454a;
-  --text: #d6d5d0;
-  --muted: #8f8d85;
-  --hover: #2c2c30;
-  --chip-on: #33402f;
-  --chip-on-border: #5c7a4e;
+  --bg: #1b1b1d; --panel-bg: #202023; --card-bg: #27272a; --border: #38383c;
+  --line: #45454a; --text: #d6d5d0; --muted: #8f8d85; --hover: #2c2c30;
+  --chip-on: #33402f; --chip-on-border: #5c7a4e;
 }
 
 .panel { border-right: 1px solid var(--border); padding: 14px 12px; background: var(--panel-bg); overflow-y: auto; }
 .panel h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: -0.2px; }
-.status { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
+.status { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
 .panel h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 16px 0 6px; }
 .placeholder { color: var(--muted); font-style: italic; font-size: 12.5px; }
+.mini { font-size: 10.5px; color: var(--muted); }
+.lbl-row { margin: 2px 0; }
 
 .opt { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 0; cursor: pointer; }
 .wbtn { margin-top: 8px; width: 100%; border: 1px solid var(--line); background: var(--card-bg); color: var(--text); border-radius: 6px; padding: 6px 0; font-size: 12px; cursor: pointer; }
 .wbtn:hover { background: var(--hover); }
 
+.seg { display: flex; gap: 4px; margin-bottom: 6px; }
+.seg button { flex: 1; border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; padding: 4px 0; font-size: 11.5px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
+.seg.small button { padding: 3px 0; font-size: 11px; }
+
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
 
 .fed { border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; margin-bottom: 8px; background: var(--card-bg); }
+.fed.hov { border-color: var(--muted); }
 .fed-top { display: flex; align-items: center; gap: 7px; }
+.fed-top .sel { flex: none; }
 .fed-name { font-size: 12.5px; font-weight: 600; flex: 1; }
-.chip { border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; width: 25px; height: 23px; cursor: pointer; font-size: 12px; line-height: 1; color: var(--muted); padding: 0; }
+.chip { border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; width: 24px; height: 23px; cursor: pointer; font-size: 11.5px; line-height: 1; color: var(--muted); padding: 0; }
 .chip.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
 .fed-size { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .fed-size .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; }
@@ -298,24 +356,16 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
 .ac-head .mode[data-mode='hide'] { color: #c07a4b; }
 .ac-head .mode[data-mode='highlight'] { color: #4f9a4f; }
 .ac-body { padding: 8px 9px 10px; border-top: 1px solid var(--border); }
-
-.seg { display: flex; gap: 4px; margin-bottom: 8px; }
-.seg button { flex: 1; border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; padding: 4px 0; font-size: 11.5px; cursor: pointer; color: var(--muted); }
-.seg button.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
-
 .stats { margin: 0; font-size: 12px; }
 .stats > div { display: flex; justify-content: space-between; padding: 1px 0; }
 .stats dt { color: var(--muted); margin: 0; }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .stage { display: grid; grid-template-rows: 1fr auto; min-width: 0; min-height: 0; }
-.viewport-wrap { position: relative; min-height: 0; }
-.vf-note {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  background: color-mix(in srgb, var(--panel-bg) 88%, transparent);
-  border: 1px solid var(--border); color: var(--muted);
-  font-size: 12px; padding: 5px 12px; border-radius: 999px; pointer-events: none;
-}
+.panes { display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr); min-width: 0; min-height: 0; }
+.pane { position: relative; border: 2px solid var(--border); min-width: 0; min-height: 0; overflow: hidden; }
+.pane-title { position: absolute; top: 6px; left: 8px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--text); background: color-mix(in srgb, var(--panel-bg) 80%, transparent); padding: 2px 8px; border-radius: 6px; pointer-events: none; }
+
 .timeline { border-top: 1px solid var(--border); padding: 10px 16px; background: var(--panel-bg); display: flex; align-items: center; gap: 12px; }
 .btn { border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; width: 34px; height: 30px; cursor: pointer; font-size: 12px; color: var(--text); }
 .btn:hover { background: var(--hover); }

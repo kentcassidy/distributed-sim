@@ -2,6 +2,23 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
+## 2026-09-10 — per-federate viewpoints (multi-viewport)
+
+- **Shared playback clock** (`viewport/clock.js`): App advances it once/frame; every
+  SceneController reads `playback.t` in its own loop, so all panes stay in sync.
+  Removed per-controller clocks / play-seek-setSpeed / onTime.
+- **Prop-driven viewports**: SceneController now takes a per-pane `viewFilter` (which
+  federates it shows) and applies display state via `applyFederateStates` /
+  `applyAircraftModes`; Viewport passes everything as props so a freshly-mounted pane
+  gets current state. Recenter is delivered as incrementing nonce props (no refs).
+- **Viewpoint control** (World section): Fused | Separated × All | Selected. Separated
+  lays out a square-ish grid — `cols=ceil(√N)` (vertical split first), rows fill after;
+  any leftover cells hold a Fused view. Federate select checkboxes appear under Selected.
+- **Panes**: colored border on hover, synced both ways with the federate panel row
+  (`hovered`); title label (color dot + name/Fused) top-left; ordered by federate name.
+- Widened panel to 268px.
+- **Deferred**: adjustable seams (resizable splits) — grid is equal tracks for now.
+
 ## 2026-09-09 (h) — NDJSON meta/role evolution (viewer side)
 
 - Wrote the schema contract: `viz/NDJSON_SCHEMA.md` (meta line: federate/dt/sectors;

@@ -4,12 +4,14 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { makeAircraftMesh } from './aircraftMesh.js'
 import { buildWorldspace, niceStep, ticksFor, formatTick } from './worldspace.js'
 import { buildGizmo } from './gizmo.js'
+import { playback } from './clock.js'
 import { DEFAULT_AIRCRAFT_SIZE, THEMES } from '../config.js'
 
-// SceneController -- one 3D viewport: renderer(s), scene, camera, controls, render loop,
-// playback clock, display state, constant-size axis labels (CSS2D), corner gizmo, and a
-// perspective/isometric projection toggle. Vue feeds it a Timeline + control calls.
-// Convention: Z-up world, X-red/Y-green/Z-blue axes.
+// SceneController -- one 3D viewport. Time comes from the shared playback clock; display
+// state (per-aircraft mode, per-federate visibility/size/highlight/halo) and a per-pane
+// VIEW FILTER (which federates this pane shows) are applied from the Vue layer. Multiple
+// instances coexist (one per pane) and all read the same clock, so they stay in sync.
+// Z-up world, X-red/Y-green/Z-blue.
 
 const HIGHLIGHT_SCALE = 1.7
 
@@ -17,22 +19,21 @@ export class SceneController {
   constructor(canvas) {
     this.canvas = canvas
     this._raf = null
-    this.onTime = null
 
     this.theme = 'light'
     this.palette = THEMES.light
     this.projection = 'perspective'
 
-    // playback
     this.timeline = null
-    this.currentTime = 0
-    this.playing = false
-    this.speed = 1
+    this.world = null
+    this.viewFilter = null // null = all federates; else array of federate names
 
     // display state
     this.aircraftMode = new Map()
     this.fedVisible = new Map()
     this.fedSize = new Map()
+    this.fedHighlight = new Map()
+    this.fedHalo = new Map()
     this.fedOf = new Map()
     this._fedBoxes = new Map()
     this.showUnits = true
@@ -40,7 +41,6 @@ export class SceneController {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    // DOM overlay for crisp, constant-size tick labels
     this.labelRenderer = new CSS2DRenderer()
     const lr = this.labelRenderer.domElement
     lr.style.position = 'absolute'
@@ -69,13 +69,11 @@ export class SceneController {
     this.scene.add(this.worldGroup, this.overlayGroup, this.fleetGroup, this.labelGroup)
     this.meshes = new Map()
     this.worldspace = null
-    this.world = null
     this._labels = []
 
     this.gizmo = buildGizmo(this.palette)
     this.gizmoVisible = true
 
-    this._clock = new THREE.Clock()
     this._tmpSize = new THREE.Vector2()
     this._onResize = this._onResize.bind(this)
     this._resizeObserver = new ResizeObserver(this._onResize)
@@ -104,23 +102,17 @@ export class SceneController {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
-    this.controls.mouseButtons = {
-      LEFT: THREE.MOUSE.PAN,
-      MIDDLE: THREE.MOUSE.ROTATE,
-      RIGHT: THREE.MOUSE.PAN,
-    }
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN }
   }
 
   setProjection(mode) {
     if (mode === this.projection) return
     this.projection = mode
     if (!this.world) return
-
     const target = this.controls.target.clone()
     const offset = this.camera.position.clone().sub(target)
     const dir = offset.clone().normalize()
     const dist = offset.length() || this._worldDiag()
-
     if (mode === 'isometric') this._orthoH = this._worldDiag() / (this.camera.zoom || 1)
     this.controls.dispose()
     this.camera = this._makeCamera(mode, this._aspect())
@@ -135,7 +127,6 @@ export class SceneController {
 
   setTimeline(timeline) {
     this.timeline = timeline
-    this.currentTime = 0
 
     this._clearGroup(this.worldGroup)
     this._clearGroup(this.overlayGroup)
@@ -162,36 +153,74 @@ export class SceneController {
     }
 
     this._frameCamera(this.world)
+    this._refreshBoxes()
     this._refreshFleet()
-    this._applyTime()
+    this._applyTime(playback.t)
   }
 
-  // --- display controls --------------------------------------------------------
+  // --- applied from Vue --------------------------------------------------------
 
-  setAircraftMode(id, mode) {
-    this.aircraftMode.set(id, mode)
+  setViewFilter(filter) {
+    // null (or undefined) = all federates; an array = only those names (empty = none)
+    this.viewFilter = Array.isArray(filter) ? filter : null
+    this._refreshFleet()
+    this._refreshBoxes()
+  }
+
+  applyAircraftModes(modes) {
+    for (const [id, mode] of Object.entries(modes || {})) this.aircraftMode.set(Number(id), mode)
     this._refreshFleet()
   }
-  setFederateVisible(name, visible) {
-    this.fedVisible.set(name, visible)
+
+  applyFederateStates(states) {
+    for (const [name, s] of Object.entries(states || {})) {
+      this.fedVisible.set(name, s.visible !== false)
+      if (s.size != null) this.fedSize.set(name, s.size)
+      this.fedHighlight.set(name, !!s.highlight)
+      this.fedHalo.set(name, !!s.halo)
+    }
+    this._refreshBoxes()
     this._refreshFleet()
   }
-  setFederateSize(name, size) {
-    this.fedSize.set(name, size)
-    this._refreshFleet()
+
+  setTheme(theme) {
+    this.theme = theme
+    this.palette = THEMES[theme] || THEMES.light
+    this.scene.background = new THREE.Color(this.palette.background)
+    if (this.world) {
+      this._clearGroup(this.worldGroup)
+      this.worldspace = buildWorldspace(this.world, this.palette)
+      this.worldGroup.add(this.worldspace.group)
+      this._buildLabels()
+    }
+    this._disposeScene(this.gizmo.scene)
+    this.gizmo = buildGizmo(this.palette)
   }
-  setFederateHighlight(name, on) {
-    this._ensureFedBox(name)
-    this._fedBoxes.get(name).box.visible = on
+
+  setGizmoVisible(on) {
+    this.gizmoVisible = on
   }
-  setFederateHalo(name, on) {
-    this._ensureFedBox(name)
-    this._fedBoxes.get(name).halo.visible = on
-  }
+
   setUnitsVisible(on) {
     this.showUnits = on
     this.labelGroup.visible = on
     for (const l of this._labels) l.obj.visible = on
+  }
+
+  recenterWorld() {
+    if (this.world) this._frameCamera(this.world, false)
+  }
+
+  recenterFederate(name) {
+    const b = this._federateBounds(name)
+    if (b) this._frameCamera(this._expand(b, 0.12), false)
+    else this.recenterWorld()
+  }
+
+  // --- internals ---------------------------------------------------------------
+
+  _inFilter(fed) {
+    return !this.viewFilter || this.viewFilter.includes(fed)
   }
 
   _refreshFleet() {
@@ -200,11 +229,23 @@ export class SceneController {
       const mode = this.aircraftMode.get(id) || 'show'
       const fedOn = this.fedVisible.get(fed) !== false
       const highlight = mode === 'highlight'
-      mesh.visible = fedOn && mode !== 'hide'
+      mesh.visible = fedOn && mode !== 'hide' && this._inFilter(fed)
       const size = this.fedSize.get(fed) || DEFAULT_AIRCRAFT_SIZE
       mesh.scale.setScalar((size / 2) * (highlight ? HIGHLIGHT_SCALE : 1))
       mesh.material.emissive.setHex(highlight ? mesh.material.color.getHex() : 0x000000)
       mesh.material.emissiveIntensity = highlight ? 0.55 : 0
+    }
+  }
+
+  _refreshBoxes() {
+    if (!this.world) return
+    for (const [name, on] of this.fedHighlight) {
+      this._ensureFedBox(name)
+      this._fedBoxes.get(name).box.visible = on && this._inFilter(name)
+    }
+    for (const [name, on] of this.fedHalo) {
+      this._ensureFedBox(name)
+      this._fedBoxes.get(name).halo.visible = on && this._inFilter(name)
     }
   }
 
@@ -223,37 +264,6 @@ export class SceneController {
     return f ? f.color : 0x333333
   }
 
-  // --- theme / gizmo -----------------------------------------------------------
-
-  setTheme(theme) {
-    this.theme = theme
-    this.palette = THEMES[theme] || THEMES.light
-    this.scene.background = new THREE.Color(this.palette.background)
-    if (this.world) {
-      this._clearGroup(this.worldGroup)
-      this.worldspace = buildWorldspace(this.world, this.palette)
-      this.worldGroup.add(this.worldspace.group)
-      this._buildLabels()
-    }
-    this._disposeScene(this.gizmo.scene)
-    this.gizmo = buildGizmo(this.palette)
-  }
-  setGizmoVisible(on) {
-    this.gizmoVisible = on
-  }
-
-  // --- playback ----------------------------------------------------------------
-
-  play() { this.playing = true }
-  pause() { this.playing = false }
-  togglePlay() { this.playing = !this.playing }
-  setSpeed(s) { this.speed = s }
-  seek(t) {
-    if (!this.timeline) return
-    this.currentTime = Math.max(0, Math.min(t, this.timeline.duration))
-    this._applyTime()
-  }
-
   dispose() {
     if (this._raf) cancelAnimationFrame(this._raf)
     this._resizeObserver.disconnect()
@@ -267,20 +277,17 @@ export class SceneController {
     this.renderer.dispose()
   }
 
-  // --- labels (CSS2D, constant screen size) ------------------------------------
+  // --- labels ------------------------------------------------------------------
 
   _buildLabels() {
     for (const l of this._labels) l.el.remove()
     this._labels.length = 0
     this._clearGroup(this.labelGroup)
     if (!this.world) return
-
-    // Per-axis step so every axis (incl. the thin Z) gets ~6 readable ticks. (The grid
-    // cells still use one GLOBAL step to stay square; labels are decoupled from that.)
     for (let axis = 0; axis < 3; axis++) {
       const step = niceStep(this.world.max[axis] - this.world.min[axis])
       for (const v of ticksFor(this.world.min[axis], this.world.max[axis], step)) {
-        if (Math.abs(v) < step * 1e-6) continue // skip origin
+        if (Math.abs(v) < step * 1e-6) continue
         const div = document.createElement('div')
         div.textContent = formatTick(v)
         div.style.font = '12px system-ui, sans-serif'
@@ -296,8 +303,6 @@ export class SceneController {
     this.labelGroup.visible = this.showUnits
   }
 
-  // Park labels on the box edges, matplotlib-style: X/Y along the back-bottom edges,
-  // Z up the back vertical edge; the chosen edges flip as the camera orbits.
   _updateLabels(camera) {
     if (!this.world || this._labels.length === 0) return
     const b = this.world
@@ -305,16 +310,10 @@ export class SceneController {
     const cam = camera.position
     const off = this._worldMaxExtent() * 0.015
     const val = (ax, side) => (side ? b.max[ax] : b.min[ax])
-
-    // A wall is drawn only where we see its interior (same rule as the grids/room).
     const wallVisible = (ax, side) => {
-      const n = side ? 1 : -1 // outward normal component along ax
+      const n = side ? 1 : -1
       return n * (cam.getComponent(ax) - val(ax, side)) < 0
     }
-
-    // For a label axis A, choose the edge (fixed sides of the other two axes) that is
-    // attached to at least one VISIBLE wall and is closest to the camera -- so labels
-    // ride a drawn grid plane instead of floating on a hidden corner.
     const pickEdge = (A) => {
       const [B, C] = A === 0 ? [1, 2] : A === 1 ? [0, 2] : [0, 1]
       let best = null
@@ -333,24 +332,21 @@ export class SceneController {
           }
         }
       }
-      if (!best) {
-        best = { B, C, sB: cam.getComponent(B) > c[B] ? 1 : 0, sC: cam.getComponent(C) > c[C] ? 1 : 0 }
-      }
+      if (!best) best = { B, C, sB: cam.getComponent(B) > c[B] ? 1 : 0, sC: cam.getComponent(C) > c[C] ? 1 : 0 }
       return best
     }
-
     const edges = [pickEdge(0), pickEdge(1), pickEdge(2)]
     for (const l of this._labels) {
       const e = edges[l.axis]
       const coord = [0, 0, 0]
       coord[l.axis] = l.value
-      coord[e.B] = val(e.B, e.sB) + (e.sB ? off : -off) // nudge outward for legibility
+      coord[e.B] = val(e.B, e.sB) + (e.sB ? off : -off)
       coord[e.C] = val(e.C, e.sC) + (e.sC ? off : -off)
       l.obj.position.set(coord[0], coord[1], coord[2])
     }
   }
 
-  // --- geometry helpers --------------------------------------------------------
+  // --- geometry ----------------------------------------------------------------
 
   _worldBounds(dataBounds) {
     const min = [...dataBounds.min]
@@ -376,7 +372,6 @@ export class SceneController {
     }
     return { min, max }
   }
-
   _expand(b, frac) {
     const min = [...b.min]
     const max = [...b.max]
@@ -387,7 +382,6 @@ export class SceneController {
     }
     return { min, max }
   }
-
   _worldMaxExtent() {
     const b = this.world
     return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
@@ -400,9 +394,24 @@ export class SceneController {
     const p = this.canvas.parentElement
     return p.clientHeight ? p.clientWidth / p.clientHeight : 1
   }
+  _federateBounds(name) {
+    if (!this.timeline) return null
+    const min = [Infinity, Infinity, Infinity]
+    const max = [-Infinity, -Infinity, -Infinity]
+    let any = false
+    for (const tr of this.timeline.tracks.values()) {
+      if (tr.federate !== name) continue
+      for (const p of tr.pos) {
+        any = true
+        for (let i = 0; i < 3; i++) {
+          if (p[i] < min[i]) min[i] = p[i]
+          if (p[i] > max[i]) max[i] = p[i]
+        }
+      }
+    }
+    return any ? { min, max } : null
+  }
 
-  // Fit `bounds` in view. preserveDir keeps the current orbit angle (used by the
-  // recenter buttons); otherwise a default 3/4 angle is used (initial framing).
   _frameCamera(bounds, preserveDir = false) {
     const center = new THREE.Vector3(
       (bounds.min[0] + bounds.max[0]) / 2,
@@ -438,41 +447,9 @@ export class SceneController {
     this.controls.update()
   }
 
-  // --- recenter ----------------------------------------------------------------
-
-  // Recenter also snaps back to the initial 3/4 viewing angle (preserveDir = false).
-  recenterWorld() {
-    if (this.world) this._frameCamera(this.world, false)
-  }
-
-  recenterFederate(name) {
-    const b = this._federateBounds(name)
-    if (b) this._frameCamera(this._expand(b, 0.12), false)
-    else this.recenterWorld()
-  }
-
-  // AABB over the positions of the aircraft this federate owns (its "local world").
-  _federateBounds(name) {
-    if (!this.timeline) return null
-    const min = [Infinity, Infinity, Infinity]
-    const max = [-Infinity, -Infinity, -Infinity]
-    let any = false
-    for (const tr of this.timeline.tracks.values()) {
-      if (tr.federate !== name) continue
-      for (const p of tr.pos) {
-        any = true
-        for (let i = 0; i < 3; i++) {
-          if (p[i] < min[i]) min[i] = p[i]
-          if (p[i] > max[i]) max[i] = p[i]
-        }
-      }
-    }
-    return any ? { min, max } : null
-  }
-
-  _applyTime() {
+  _applyTime(t) {
     if (!this.timeline) return
-    for (const s of this.timeline.sample(this.currentTime)) {
+    for (const s of this.timeline.sample(t)) {
       const mesh = this.meshes.get(s.id)
       if (!mesh) continue
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2])
@@ -481,30 +458,21 @@ export class SceneController {
   }
 
   _loop() {
-    const dt = this._clock.getDelta()
-    if (this.playing && this.timeline) {
-      const dur = this.timeline.duration
-      this.currentTime += dt * this.speed
-      if (this.currentTime >= dur) this.currentTime = 0
-      this._applyTime()
-    }
+    if (this.timeline) this._applyTime(playback.t)
     this.controls.update()
     if (this.worldspace) this.worldspace.updateWalls(this.camera)
     if (this.showUnits) this._updateLabels(this.camera)
     this.renderer.render(this.scene, this.camera)
     this.labelRenderer.render(this.scene, this.camera)
     this._renderGizmo()
-    if (this.onTime) {
-      this.onTime(this.currentTime, this.playing, this.timeline ? this.timeline.duration : 0)
-    }
     this._raf = requestAnimationFrame(this._loop)
   }
 
   _renderGizmo() {
     if (!this.gizmoVisible || !this.gizmo) return
     const size = this.renderer.getSize(this._tmpSize)
-    const gs = Math.max(64, Math.min(120, size.x * 0.16))
-    const m = 10
+    const gs = Math.max(56, Math.min(110, size.x * 0.16))
+    const m = 8
     const x = size.x - gs - m
     const y = size.y - gs - m
     this.gizmo.update(this.camera)
@@ -560,11 +528,7 @@ export class SceneController {
 }
 
 function dashedBox(bounds, color, dash, opacity) {
-  const size = [
-    bounds.max[0] - bounds.min[0],
-    bounds.max[1] - bounds.min[1],
-    bounds.max[2] - bounds.min[2],
-  ]
+  const size = [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]]
   const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...size))
   const line = new THREE.LineSegments(
     edges,
