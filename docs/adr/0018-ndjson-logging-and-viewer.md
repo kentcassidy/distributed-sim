@@ -52,3 +52,16 @@ CSV-interchange consequence of ADR-0003, which otherwise stands.
 - The controller writes its sector geometry + assignment events into the same stream,
   which is what makes segmentation/merging visible.
 - SQLite and a richer 3D viewer remain clean, additive upgrades.
+
+## Update (2026-09-10) — viewer went 3D (WebGL), not Canvas 2D
+
+The **NDJSON seam and the "C++ only emits" rule stand unchanged.** Only the viewer
+*technology* is revised: the entity state is genuinely 3D (a `Vec3` position and a
+quaternion), so the "Canvas 2D top-down" decision above was underscoped. The viewer
+built in `viz/` is **Vue + Vite + Three.js** (WebGL, Z-up, RGB axes), replay-first,
+with realtime via SSE still the later flip. This is the "richer 3D viewer" the
+alternatives list had deferred — pulled forward because it is both more faithful to the
+data and more compelling for the presentation, and it remains off the critical path
+(dev-server-only; no web/DB in the federate). The NDJSON schema also grew a `meta` line
+and a per-aircraft `role` (see `viz/NDJSON_SCHEMA.md`); the C++ emitter change to
+produce them is pending, to be done in the main library.

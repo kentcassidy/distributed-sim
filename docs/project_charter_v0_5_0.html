@@ -216,7 +216,17 @@ td code{font-size:11.5px}
   <div id="tl-ck"></div>
 
   <div class="note ok">
-    <span class="lbl">Progress &mdash; M1 &amp; M2 done; scope reframed; constructive partition-invariance path next (Sep 9)</span>
+    <span class="lbl">Progress &mdash; M1 &amp; M2 done; scope reframed; 3D viewer built; C++ constructive path next (Sep 10 checkpoint)</span>
+    <strong>Sep 10 checkpoint:</strong> off the critical path, a full <strong>3D worldspace
+    viewer</strong> was built (<code>viz/</code>, Vue&nbsp;+&nbsp;Vite&nbsp;+&nbsp;Three.js) that
+    replays the federation&rsquo;s NDJSON truth &mdash; synced multi-viewport per-federate views,
+    playback, worldspace/grids/units, theming. The NDJSON seam grew a <code>meta</code> line and a
+    per-aircraft <code>role</code> (viewer-side done; the C++ emitter change is pending &mdash;
+    <code>viz/NDJSON_SCHEMA.md</code>). The <em>live-coupling</em> question is <strong>closed</strong>:
+    aircraft are independent in the constructive core, so the invariance&rsquo;s teeth are handoff/
+    migration, not interaction. Viewer detail supersedes ADR-0018&rsquo;s &ldquo;Canvas 2D.&rdquo;
+    <strong>Next = the C++ library:</strong> emit <code>meta</code>+<code>role</code>, then
+    partition-by-config &rarr; the K=1-vs-K=2 truth diff.
     <strong>Done:</strong> reproducible Ubuntu&nbsp;22.04 / GCC&nbsp;11 image; Portico&nbsp;2.1.0 vendored; the
     <code>src/</code> skeleton; sector/controller architecture (ADRs&nbsp;0015&ndash;0016); and the
     <strong>M1 RTI handshake &mdash; verified</strong>: two federates discover and reflect a real attribute exchange with

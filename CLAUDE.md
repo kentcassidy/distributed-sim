@@ -91,15 +91,24 @@ Mixing them up is the mistake to avoid:
 ## Where things stand (pickup)
 
 See `current-state-pickup` (memory) and the latest `docs/devlog/Claude Generated/`
-entry. As of 2026-09-09: `LinearLongitudinal::derivative` implemented (filler);
-`World::advance` + `Sector::contains`/`inHalo` + `World::outOfSector` done; the
-aircraft federate publishes real `Position` and writes NDJSON.
+entry. As of **2026-09-10**: the RTI-free core is in (`LinearLongitudinal::derivative`
+filler; `World::advance`; `Sector::contains`/`inHalo`; `World::outOfSector`) and the
+aircraft federate publishes real `Position` and writes NDJSON. **Off the critical path,
+a full 3D worldspace viewer was built** in `viz/` (Vue + Vite + Three.js) that replays
+the NDJSON truth — synced per-federate viewpoints, playback, theming. It is NOT part of
+the C++ build (`viz/` is walled off) and the federate still only *emits* NDJSON.
 
-**Next (constructive path):** get each federate's truth to the controller and build
-the **K=1-vs-K=2 truth diff**, plus the determinism scaffolding (conservative time
-management) that makes a bit-exact match possible. Ghosts/DR are the *Live* experiment
-after that.
+**Resolved:** the **live-coupling** question is closed — aircraft are **independent** in
+the constructive core, so truth can be flushed per sector/handoff; the invariance's
+teeth are in handoff/migration, not interaction. (Ghosts/DR/latency = the later *Live*
+experiment only.)
 
-**Open question to resolve first:** is there **live coupling** between aircraft during
-the constructive run (does one aircraft's step depend on another's state)? That decides
-whether truth must be streamed every step or can be flushed per sector/handoff.
+**Next — the C++ library (in order):**
+1. Emit the evolved NDJSON: patch `AircraftFederate.cpp` to write a `meta` line + a
+   per-aircraft `role` (exact change specced in `viz/NDJSON_SCHEMA.md`). User compiles
+   in their container.
+2. **Partition-by-config** (the constructive core): replace the name-derived single
+   aircraft with a config-driven **list** from a shared scenario (id→IC); tell each
+   federate which ids it owns (K=1 co-located vs K=2 split). `src/controller/` is the
+   home for the assignment. Then the **K=1-vs-K=2 truth diff** on fixed dt / order /
+   seed. Static assignment first; migration/handoff second (the real teeth).

@@ -1,0 +1,85 @@
+DEVLOG — 2026-09-10 (Claude-generated session log)
+====================================================
+
+Focus: built the 3D worldspace VIEWER end-to-end (off the critical path, for the
+presentation), evolved the NDJSON schema on the viewer side, and set a consolidation
+checkpoint before shifting to the C++ library. No C++ changed this session.
+
+WHY THE VIEWER, NOW
+-------------------
+The user's call: get VISUAL proof the simulation exists before proving it's
+distributed. A worldspace you can watch reads as "real" to a panel in a way a
+bit-diff never will, and it's off the critical path so it can't threaten the Sep-13
+constructive result. Sound presentation instinct; taken.
+
+WHAT WAS BUILT (all under viz/, walled off from the C++/CMake build)
+--------------------------------------------------------------------
+Stack: Vue + Vite + Three.js (plain Three inside a Vue component; TresJS skipped for
+legibility). Dev server only; the federate still just EMITS NDJSON. World is Z-UP
+(sim z = altitude, like Blender); axes X-red/Y-green/Z-blue.
+
+- Auto-ingest: a Vite dev plugin serves repo-root sim_out/ (index.json + files); the
+  loader parses + merges the per-federate NDJSON into one Timeline (lerp pos, nlerp
+  quat, data bounds). Verified against the real F1/F2 files.
+- Playback: a SHARED clock (viz/src/viewport/clock.js) advanced once/frame by App and
+  read by every viewport, so all panes stay in sync. Play/pause, scrub, speed; keyboard
+  transport (Space; arrows +/-1ms; Shift +/-1s; Ctrl +/-5s).
+- Worldspace: a volumetric "room" showing only interior-facing walls (matches BackSide
+  color); grids on those walls with major/minor lines at ONE global step (square cells);
+  thin arrowed RGB axes; constant-size (CSS2D) tick UNITS parked on the nearest edge
+  attached to a visible wall (incl. Z); a Blender-style corner orientation gizmo (XYZ
+  labels live there). Isometric (orthographic) toggle. Color box renders behind planes
+  (no wing clipping). Recenter (world + per-federate), resetting to the initial angle.
+- Control panel (now TWO collapsible panels, Controls | Aircraft): per-federate
+  show/hide/highlight(bounding box)/halo/size; per-aircraft show/hide/highlight +
+  live stats; aircraft list sort/filter by federation (sticky group headers) + an
+  "only active federations" sync.
+- Per-federate VIEWPOINTS: multiple synced viewports — Fused | Separated x All |
+  Selected. Separated lays out a square-ish grid (cols=ceil(sqrt N), vertical split
+  first), leftover cells hold a Fused view. Panes carry a title and a federate-colored
+  border on hover, three-way synced (aircraft row <-> federate slot <-> pane).
+
+NDJSON SCHEMA EVOLUTION (viewer side; C++ emitter DEFERRED)
+----------------------------------------------------------
+- Contract written: viz/NDJSON_SCHEMA.md — optional `meta` first line
+  (federate/dt/sectors) + per-aircraft `role` ("owned" | "ghost", defaults owned).
+- Loader/timeline speak it with full back-compat: no meta -> federate=filename,
+  role=owned; the current sim_out files load unchanged. God view built from owned rows;
+  ghost rows understood but deferred to the Live/viewpoint feature.
+- viz/tools/gen-sample.mjs emits new-schema sample data + is the reference shape the
+  federate should emit.
+- DEFERRED to the main C++ library: patch AircraftFederate.cpp to emit the meta line +
+  role (exact change specced in viz/NDJSON_SCHEMA.md).
+
+SCOPE / DECISIONS CONFIRMED
+---------------------------
+- Live coupling question CLOSED: aircraft are INDEPENDENT in the constructive core
+  (settled with the user). The invariance's teeth are handoff/migration, not aircraft
+  interaction. Ghosts belong only to the later Live experiment.
+- ADR-0018's "Canvas 2D" viewer detail is SUPERSEDED: the state is genuinely 3D
+  (Vec3 + quaternion), so a WebGL (Three.js) viewer is both more honest and more
+  impressive. Logged on ADR-0018.
+
+DOC SYNC (this checkpoint)
+--------------------------
+- NEW devlog (this file).
+- ADR-0018: superseding note (3D Vue/Three viewer replaces the Canvas-2D detail; NDJSON
+  seam + "C++ only emits" unchanged).
+- Charter Scope progress note refreshed (viewer built; coupling closed; next = C++).
+- /CLAUDE.md "Where things stand" refreshed for a fresh agent.
+- Memory: current-state-pickup rewritten as the handoff; viz-logging-ndjson-pipeline
+  updated (3D stack + schema implemented viewer-side, emitter pending).
+- NEW docs/viz-kanban.md — discrete cards for the GitHub Projects board.
+
+HANDOFF — NEXT STEPS (for a fresh agent)
+----------------------------------------
+Read order unchanged: /CLAUDE.md -> charter Scope tab -> this devlog -> memory index.
+The viewer is at a strong stopping point. The next move is the C++ LIBRARY:
+1. Apply the NDJSON emitter patch in AircraftFederate.cpp (meta line + role) — spec in
+   viz/NDJSON_SCHEMA.md. User compiles in their container (do NOT build on host).
+2. The constructive core: partition-by-config — replace the name-derived single
+   aircraft with a config-driven LIST from a shared scenario (id->IC); tell each
+   federate which ids it owns (K=1 co-located vs K=2 split). src/controller/ is the
+   home for the assignment. Then the K=1-vs-K=2 truth diff on fixed dt/order/seed.
+   Static assignment first; migration/handoff second (the real teeth).
+Ghosts/dead-reckoning/latency = the later Live experiment, NOT the constructive core.
