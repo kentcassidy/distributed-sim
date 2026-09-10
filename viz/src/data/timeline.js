@@ -10,17 +10,30 @@ import { federateColor } from '../config.js'
 // It's framework-agnostic (no Three.js) so the same data can feed N viewports.
 
 export function buildTimeline(sources) {
-  const tracks = new Map() // id -> {id, federate, times[], pos[], quat[]}
+  const tracks = new Map() // id -> {id, federate, role, times[], pos[], vel[], quat[]}
   const federateNames = []
+  let dt = null
+  const sectors = []
 
   for (const src of sources) {
     if (!federateNames.includes(src.federate)) federateNames.push(src.federate)
+    if (src.meta) {
+      if (dt == null && src.meta.dt != null) dt = src.meta.dt
+      if (Array.isArray(src.meta.sectors)) {
+        for (const s of src.meta.sectors) sectors.push({ ...s, owner: s.owner || src.federate })
+      }
+    }
     for (const frame of src.frames) {
       const t = frame.t
       for (const ac of frame.aircraft || []) {
+        const role = ac.role || 'owned'
+        // The god/truth timeline is built from OWNED reports only. Ghost rows (the Live
+        // experiment) are understood by the schema but rendered in the later per-federate
+        // viewpoint feature, not in this shared view.
+        if (role !== 'owned') continue
         let tr = tracks.get(ac.id)
         if (!tr) {
-          tr = { id: ac.id, federate: src.federate, times: [], pos: [], vel: [], quat: [] }
+          tr = { id: ac.id, federate: src.federate, role, times: [], pos: [], vel: [], quat: [] }
           tracks.set(ac.id, tr)
         }
         tr.times.push(t)
@@ -55,20 +68,23 @@ export function buildTimeline(sources) {
   const aircraft = [...tracks.values()].map((tr) => ({
     id: tr.id,
     federate: tr.federate,
+    role: tr.role,
     color: colorOf.get(tr.federate),
   }))
 
-  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max } })
+  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max }, dt, sectors })
 }
 
 export class Timeline {
-  constructor({ tracks, aircraft, federates, tMin, tMax, bounds }) {
+  constructor({ tracks, aircraft, federates, tMin, tMax, bounds, dt, sectors }) {
     this.tracks = tracks
     this.aircraft = aircraft
     this.federates = federates
     this.tMin = Number.isFinite(tMin) ? tMin : 0
     this.tMax = Number.isFinite(tMax) ? tMax : 0
     this.bounds = bounds
+    this.dt = dt ?? null
+    this.sectors = sectors || []
   }
 
   get duration() {
@@ -102,7 +118,7 @@ export class Timeline {
         vel = lerp3(tr.vel[i], tr.vel[i + 1], a)
         quat = nlerp4(tr.quat[i], tr.quat[i + 1], a)
       }
-      out.push({ id: tr.id, federate: tr.federate, pos, vel, quat })
+      out.push({ id: tr.id, federate: tr.federate, role: tr.role, pos, vel, quat })
     }
     return out
   }

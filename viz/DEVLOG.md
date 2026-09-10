@@ -2,6 +2,20 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
+## 2026-09-09 (h) — NDJSON meta/role evolution (viewer side)
+
+- Wrote the schema contract: `viz/NDJSON_SCHEMA.md` (meta line: federate/dt/sectors;
+  per-aircraft `role` owned|ghost; back-compat rules; reference C++ emitter change).
+- Pipeline now speaks it: `loader` takes the federate name from `meta.federate` (falls
+  back to filename); `timeline` carries `role`, and `dt`/`sectors` from meta. God/truth
+  view built from `role:"owned"` only; ghost rows are understood but deferred to the
+  per-federate viewpoint feature. Current sim_out files (no meta/role) load unchanged.
+- Panel shows each aircraft's role · federate.
+- `tools/gen-sample.mjs`: emits new-schema sample files (meta + role) for testing +
+  as the concrete reference for the federate emitter.
+- **Deferred (main-library context):** the actual `AircraftFederate.cpp` emitter change
+  (meta line + `role`), specced in NDJSON_SCHEMA.md — not applied here.
+
 ## 2026-09-09 (g) — label edges, recenter angle, box behind planes
 
 - **Unit labels** now ride the closest edge that is ATTACHED TO A VISIBLE wall (per axis,

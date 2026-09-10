@@ -202,6 +202,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
               <button :class="{ on: acUi[a.id].mode === 'highlight' }" @click="setMode(a.id, 'highlight')">Highlight</button>
             </div>
             <dl class="stats">
+              <div><dt>role</dt><dd>{{ a.role }} · {{ a.federate }}</dd></div>
               <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
               <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
               <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>

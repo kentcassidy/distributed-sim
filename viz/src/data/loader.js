@@ -14,8 +14,10 @@ export async function loadSimOut() {
   for (const file of files) {
     const res = await fetch('/sim_out/' + file)
     if (!res.ok) throw new Error(`${file} ${res.status}`)
-    const { frames } = parseNdjson(await res.text())
-    sources.push({ federate: file.replace(/\.ndjson$/i, ''), frames })
+    const { meta, frames } = parseNdjson(await res.text())
+    // federate name: meta.federate if the file declares it, else the filename
+    const federate = (meta && meta.federate) || file.replace(/\.ndjson$/i, '')
+    sources.push({ federate, frames, meta: meta || null })
   }
   return buildTimeline(sources)
 }
