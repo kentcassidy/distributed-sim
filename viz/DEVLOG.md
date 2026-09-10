@@ -2,6 +2,16 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
+## 2026-09-10 (b) — two collapsible panels + aircraft sort/filter
+
+- Left region is now **two panels** (Controls | Aircraft), each independently scrollable
+  with a **collapse/expand tab** on its edge (grid columns shrink to a 26px strip).
+- **Aircraft list controls**: Sort (Federation | ID), Show (All / a chosen federate),
+  and "Only active federations" (synced to each federate's show/hide). Sort-by-federation
+  groups with **sticky headers**; each group/aircraft count shown.
+- Hovering an aircraft row now also colors its federate's pane border (three-way
+  hover-sync: row ↔ federate slot ↔ pane).
+
 ## 2026-09-10 — per-federate viewpoints (multi-viewport)
 
 - **Shared playback clock** (`viewport/clock.js`): App advances it once/frame; every
