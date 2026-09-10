@@ -1,14 +1,28 @@
 // Central knobs. Desmos-clean, Blender-tinted.
 
-export const PALETTE = {
-  background: 0xf7f7f5, // soft off-white ground
-  walls: 0xeceae3,      // worldspace room walls (subtle, "volumetric" fill)
-  gridMinor: 0xdcdad2,  // fine gridlines on the far walls
-  gridMajor: 0xc4c2b8,  // coarse gridlines
-  tick: '#8a887f',      // axis tick numbers (CSS color for canvas text)
-  axisX: 0xdb5a4b,      // red
-  axisY: 0x5aa02c,      // green
-  axisZ: 0x3b7fd4,      // blue
+// Theme palettes for the 3D scene (the DOM/panel theme lives in App.vue's CSS vars).
+// Grid + tick contrast bumped up a touch from the first pass for legibility.
+export const THEMES = {
+  light: {
+    background: 0xf4f3ef,
+    walls: 0xe7e5dd,
+    gridMinor: 0xcbc8be,
+    gridMajor: 0xa9a79d,
+    tick: '#6d6b64',
+    axisX: 0xcf4f41,
+    axisY: 0x4f9128,
+    axisZ: 0x2f74c8,
+  },
+  dark: {
+    background: 0x1b1b1d,
+    walls: 0x27272a,
+    gridMinor: 0x3b3b41,
+    gridMajor: 0x56565d,
+    tick: '#b7b5ad',
+    axisX: 0xe8695a,
+    axisY: 0x74c04a,
+    axisZ: 0x5aa0ea,
+  },
 }
 
 // Stable per-federate colors, assigned in file order (F1, F2, ...).

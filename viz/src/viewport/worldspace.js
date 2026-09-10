@@ -1,76 +1,87 @@
 import * as THREE from 'three'
-import { PALETTE, hexToCss } from '../config.js'
 
-// The worldspace furniture: the volumetric room, the arrowed RGB axes with tick
-// numbers, and three flat grids that live on the FAR walls and follow the camera
-// (matplotlib/plotly-style). buildWorldspace() returns a group plus an update(camera)
-// that re-parks the wall grids as you orbit.
+// The worldspace furniture: the volumetric room, thin arrowed RGB axes, and grids on
+// every wall EXCEPT the one facing the viewer (the "fourth wall"), which is hidden each
+// frame so the box reads as an enclosing gridded room. Tick UNITS are drawn separately
+// as constant-size DOM labels (see SceneController's CSS2D layer).
 //
-// Everything is Z-up and in world units (metres).
+// Z-up, world units. Gridlines use ONE global step in every dimension -> square cells.
 
-export function buildWorldspace(bounds) {
+export function buildWorldspace(bounds, palette) {
   const group = new THREE.Group()
   const size = [
     bounds.max[0] - bounds.min[0],
     bounds.max[1] - bounds.min[1],
     bounds.max[2] - bounds.min[2],
   ]
-  const center = [
+  const center = new THREE.Vector3(
     (bounds.min[0] + bounds.max[0]) / 2,
     (bounds.min[1] + bounds.max[1]) / 2,
     (bounds.min[2] + bounds.max[2]) / 2,
-  ]
-  const maxExt = Math.max(...size)
-
-  // --- room: BackSide box, only far walls render (they never occlude) ---
-  const roomGeom = new THREE.BoxGeometry(size[0], size[1], size[2])
-  const room = new THREE.Mesh(
-    roomGeom,
-    new THREE.MeshBasicMaterial({ color: PALETTE.walls, side: THREE.BackSide }),
   )
-  room.position.set(...center)
+  const maxExt = Math.max(...size)
+  const major = niceStep(maxExt)
+  const minor = major / 5
+
+  // room: BackSide box. depthWrite off + a low renderOrder so it sits BEHIND every
+  // aircraft -- wings near a wall draw over it instead of clipping into it.
+  const room = new THREE.Mesh(
+    new THREE.BoxGeometry(size[0], size[1], size[2]),
+    new THREE.MeshBasicMaterial({ color: palette.walls, side: THREE.BackSide, depthWrite: false }),
+  )
+  room.position.copy(center)
+  room.renderOrder = -10
   group.add(room)
 
-  // --- three wall grids (one per plane), parked on the far wall each frame ---
-  const wallXY = buildWallGrid(bounds, 0, 1, 2) // spans X,Y; normal = Z
-  const wallXZ = buildWallGrid(bounds, 0, 2, 1) // spans X,Z; normal = Y
-  const wallYZ = buildWallGrid(bounds, 1, 2, 0) // spans Y,Z; normal = X
-  group.add(wallXY.obj, wallXZ.obj, wallYZ.obj)
-
-  // --- axes: rods through the origin, arrowheads at the + tips, letters ---
-  const r = maxExt * 0.0016
-  addAxis(group, bounds, 0, PALETTE.axisX, r, 'X')
-  addAxis(group, bounds, 1, PALETTE.axisY, r, 'Y')
-  addAxis(group, bounds, 2, PALETTE.axisZ, r, 'Z')
-
-  // --- tick numbers along each axis (major ticks) ---
-  const pad = maxExt * 0.02
-  addTicks(group, bounds, 0, [0, -pad, 0]) // X ticks, nudged in -Y
-  addTicks(group, bounds, 1, [-pad, 0, 0]) // Y ticks, nudged in -X
-  addTicks(group, bounds, 2, [-pad, -pad, 0]) // Z ticks, nudged off the vertical
-
-  const eps = maxExt * 0.0015 // inset so grids don't z-fight the walls
-  function update(camera) {
-    const p = camera.position
-    wallXY.setN(p.z > center[2] ? bounds.min[2] + eps : bounds.max[2] - eps)
-    wallXZ.setN(p.y > center[1] ? bounds.min[1] + eps : bounds.max[1] - eps)
-    wallYZ.setN(p.x > center[0] ? bounds.min[0] + eps : bounds.max[0] - eps)
+  // six wall grids, one per face; the near ("fourth") wall is hidden in updateWalls()
+  const walls = []
+  const planes = [
+    [1, 2, 0], // normal X: grid spans Y,Z
+    [0, 2, 1], // normal Y: grid spans X,Z
+    [0, 1, 2], // normal Z: grid spans X,Y
+  ]
+  for (const [aU, aV, aN] of planes) {
+    for (const side of [0, 1]) {
+      const faceVal = side === 0 ? bounds.min[aN] : bounds.max[aN]
+      const obj = buildFaceGrid(bounds, aU, aV, aN, faceVal, palette, major, minor)
+      const normal = new THREE.Vector3()
+      normal.setComponent(aN, side === 0 ? -1 : 1) // outward
+      const faceCenter = center.clone()
+      faceCenter.setComponent(aN, faceVal)
+      walls.push({ obj, normal, faceCenter })
+      group.add(obj)
+    }
   }
 
-  return { group, update }
+  // axes: thin rods through the origin, small arrowheads, inset off the walls
+  const r = maxExt * 0.0009
+  const inset = 0.96
+  addAxis(group, bounds, 0, palette.axisX, r, inset)
+  addAxis(group, bounds, 1, palette.axisY, r, inset)
+  addAxis(group, bounds, 2, palette.axisZ, r, inset)
+
+  const toCam = new THREE.Vector3()
+  function updateWalls(camera) {
+    // Show a wall only where we're seeing its INTERIOR face -- identical to the BackSide
+    // room. A wall whose OUTWARD normal points toward the camera (we'd see its outside)
+    // is hidden. From any angle that leaves exactly the interior-facing walls, matching
+    // the room color.
+    for (const w of walls) {
+      toCam.copy(camera.position).sub(w.faceCenter)
+      w.obj.visible = w.normal.dot(toCam) < 0
+    }
+  }
+
+  return { group, updateWalls }
 }
 
-// --- wall grid ---------------------------------------------------------------
+// --- grids -------------------------------------------------------------------
 
-// aU, aV = the two in-plane world-axis indices; aN = the perpendicular (normal) axis.
-// Built at N=0 locally; setN() slides the whole grid to the chosen wall.
-function buildWallGrid(bounds, aU, aV, aN) {
+function buildFaceGrid(bounds, aU, aV, aN, faceVal, palette, major, minor) {
   const uMin = bounds.min[aU]
   const uMax = bounds.max[aU]
   const vMin = bounds.min[aV]
   const vMax = bounds.max[aV]
-  const majU = niceStep(uMax - uMin)
-  const majV = niceStep(vMax - vMin)
 
   const minorPts = []
   const majorPts = []
@@ -78,41 +89,37 @@ function buildWallGrid(bounds, aU, aV, aN) {
     const c = [0, 0, 0]
     c[aU] = u
     c[aV] = v
+    c[aN] = faceVal
     return c
   }
   const lineU = (u, arr) => arr.push(...P(u, vMin), ...P(u, vMax))
   const lineV = (v, arr) => arr.push(...P(uMin, v), ...P(uMax, v))
 
-  forEachTick(uMin, uMax, majU / 5, (u) => lineU(u, minorPts))
-  forEachTick(vMin, vMax, majV / 5, (v) => lineV(v, minorPts))
-  forEachTick(uMin, uMax, majU, (u) => lineU(u, majorPts))
-  forEachTick(vMin, vMax, majV, (v) => lineV(v, majorPts))
+  forEachTick(uMin, uMax, minor, (u) => lineU(u, minorPts))
+  forEachTick(vMin, vMax, minor, (v) => lineV(v, minorPts))
+  forEachTick(uMin, uMax, major, (u) => lineU(u, majorPts))
+  forEachTick(vMin, vMax, major, (v) => lineV(v, majorPts))
 
-  const obj = new THREE.Group()
-  obj.add(lineSegments(minorPts, PALETTE.gridMinor))
-  obj.add(lineSegments(majorPts, PALETTE.gridMajor))
-
-  return {
-    obj,
-    setN(n) {
-      obj.position.setComponent(aN, n)
-    },
-  }
+  const g = new THREE.Group()
+  g.add(lineSegments(minorPts, palette.gridMinor))
+  g.add(lineSegments(majorPts, palette.gridMajor))
+  return g
 }
 
 function lineSegments(points, color) {
   const geom = new THREE.BufferGeometry()
   geom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
-  return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color }))
+  // depthWrite off so the near walls' lines never hide the aircraft
+  return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color, depthWrite: false }))
 }
 
 // --- axes --------------------------------------------------------------------
 
-function addAxis(group, bounds, axis, color, radius, letter) {
+function addAxis(group, bounds, axis, color, radius, inset) {
   const from = [0, 0, 0]
   const to = [0, 0, 0]
-  from[axis] = bounds.min[axis]
-  to[axis] = bounds.max[axis]
+  from[axis] = bounds.min[axis] * inset
+  to[axis] = bounds.max[axis] * inset
 
   const a = new THREE.Vector3(...from)
   const b = new THREE.Vector3(...to)
@@ -120,73 +127,27 @@ function addAxis(group, bounds, axis, color, radius, letter) {
   const len = dir.length() || 1e-6
   dir.normalize()
 
-  // rod
   const rod = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, len, 12),
+    new THREE.CylinderGeometry(radius, radius, len, 10),
     new THREE.MeshBasicMaterial({ color }),
   )
   rod.position.copy(a).add(b).multiplyScalar(0.5)
   rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
   group.add(rod)
 
-  // arrowhead at the + tip
-  const headLen = radius * 12
+  const headLen = radius * 8
   const head = new THREE.Mesh(
-    new THREE.ConeGeometry(radius * 3.2, headLen, 16),
+    new THREE.ConeGeometry(radius * 2.6, headLen, 14),
     new THREE.MeshBasicMaterial({ color }),
   )
   head.position.copy(b)
   head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
   group.add(head)
-
-  // axis letter just past the tip
-  const label = makeTextSprite(letter, hexToCss(color), radius * 46)
-  const lp = b.clone().addScaledVector(dir, headLen * 2)
-  label.position.copy(lp)
-  group.add(label)
 }
 
-function addTicks(group, bounds, axis, offset) {
-  const min = bounds.min[axis]
-  const max = bounds.max[axis]
-  const step = niceStep(max - min)
-  const height = Math.max(max - min, 1) * 0.035
-  forEachTick(min, max, step, (t) => {
-    if (Math.abs(t) < step * 1e-6) return // skip 0 (origin clutter)
-    const pos = [0, 0, 0]
-    pos[axis] = t
-    const spr = makeTextSprite(formatTick(t), PALETTE.tick, height)
-    spr.position.set(pos[0] + offset[0], pos[1] + offset[1], pos[2] + offset[2])
-    group.add(spr)
-  })
-}
+// --- tick math (shared with the label layer) ---------------------------------
 
-// --- text sprites ------------------------------------------------------------
-
-function makeTextSprite(text, cssColor, worldHeight) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 128
-  const ctx = canvas.getContext('2d')
-  ctx.font = 'bold 72px system-ui, sans-serif'
-  ctx.fillStyle = cssColor
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, 128, 64)
-
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.minFilter = THREE.LinearFilter
-  const spr = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }),
-  )
-  // canvas is 2:1, so width = 2 * height
-  spr.scale.set(worldHeight * 2, worldHeight, 1)
-  return spr
-}
-
-// --- tick math ---------------------------------------------------------------
-
-function niceStep(range, target = 6) {
+export function niceStep(range, target = 6) {
   const raw = (range || 1) / target
   const mag = Math.pow(10, Math.floor(Math.log10(raw)))
   const norm = raw / mag
@@ -194,13 +155,19 @@ function niceStep(range, target = 6) {
   return step * mag
 }
 
+export function ticksFor(min, max, step) {
+  const out = []
+  forEachTick(min, max, step, (t) => out.push(t))
+  return out
+}
+
+export function formatTick(v) {
+  const r = Math.round(v)
+  return Math.abs(r) >= 1000 ? (r / 1000).toFixed(r % 1000 ? 1 : 0) + 'k' : String(r)
+}
+
 function forEachTick(min, max, step, cb) {
   if (!(step > 0)) return
   const start = Math.ceil(min / step - 1e-9) * step
   for (let x = start; x <= max + 1e-9; x += step) cb(x)
-}
-
-function formatTick(v) {
-  const r = Math.round(v)
-  return Math.abs(r) >= 1000 ? (r / 1000).toFixed(r % 1000 ? 1 : 0) + 'k' : String(r)
 }

@@ -2,6 +2,56 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
+## 2026-09-09 (g) — label edges, recenter angle, box behind planes
+
+- **Unit labels** now ride the closest edge that is ATTACHED TO A VISIBLE wall (per axis,
+  pick the nearest of the corner-edges bordering a drawn plane), so they no longer float
+  on a hidden near corner when viewing through a corner. Same visibility rule as grids.
+- **Recenter** buttons now also reset to the initial 3/4 viewing angle (preserveDir off).
+- **Color box behind planes**: room material is depthWrite:false + renderOrder -10, so
+  aircraft wings near a wall draw over it instead of clipping into it.
+
+## 2026-09-09 (f) — corrections: interior walls, near-edge units, recenter
+
+- **Walls**: now show a grid on a face iff we're seeing its INTERIOR (back) face — i.e.
+  the same faces as the BackSide room color (outward-normal·toCamera < 0). Replaces the
+  "hide one wall" rule; leaves the interior-facing 2–3 walls, matching the color.
+- **Units**: (a) placed on the CLOSEST edge to the camera now (was farthest); (b) tick
+  values use a PER-AXIS nice step so the thin Z axis actually gets labels (the global
+  grid step gave Z none). Grid cells stay square on the global step; labels decoupled.
+- **Recenter**: `recenterWorld()` (fits the whole shared worldspace) on the World panel;
+  `recenterFederate(name)` (fits that federate's owned aircraft bounds) as a ⊕ chip per
+  federate. Both keep the current orbit angle. Identical while one federate owns all.
+
+## 2026-09-09 (e) — transport keys, edge units, enclosing grids, isometric
+
+- **Keyboard transport**: Space = play/pause; ←/→ = ±1 ms; Shift+←/→ = ±1 s;
+  Ctrl+←/→ = ±5 s. Guarded so form controls (incl. sliders) keep native key behavior.
+- **Axis units**: moved from view-scaled 3D sprites to **CSS2D DOM labels** — constant
+  12px, crisp. Parked on the **box edges** (matplotlib-style: X/Y on the back-bottom
+  edges, Z up the back vertical edge), flipping as the camera orbits. Z units included.
+  Show/hide via a **Units** toggle.
+- **Grids on all walls but the "fourth wall"**: six fixed wall grids; each frame the one
+  facing the camera is hidden. Grid lines use `depthWrite:false` so near walls don't hide
+  aircraft. Compensates for perspective vs the old 3-far-wall look.
+- **Isometric toggle** (World section): swaps the perspective camera for an orthographic
+  one (parallel projection), preserving orientation; controls rebuilt for the new camera.
+
+## 2026-09-09 (d) — readability pass
+
+- Narrower panel (`--panel-w: 240px`) → more room for the viewport.
+- **Dark mode** for the whole screen: CSS variables (light/dark) for the DOM; scene
+  palette in `config.js` `THEMES`; `SceneController.setTheme()` rebuilds worldspace +
+  gizmo. Bumped grid/tick contrast.
+- **Corner axis gizmo** (`gizmo.js`) mirrors the camera orientation, top-right, with the
+  X/Y/Z labels — so the in-scene axis letters were removed. Toggle in the World section.
+  Rendered via a scissored corner viewport (autoClear off so it doesn't wipe the frame).
+- **Square gridlines**: one global step in every dimension (true sim distance), not
+  per-axis. Thinner axis rods; small arrowheads; axes inset so the +Z arrow no longer
+  collides with the federate bounding box.
+- **Vector field** toggle (World section) → shows a "No vector field / wind loaded"
+  overlay for now; real arrows (thin, thickness = strength, behind planes) are the TODO.
+
 ## 2026-09-09 (c) — control panel + axis/grid system
 
 - **Far-wall grids**: 3 flat grids (`worldspace.js`) that park on the far walls and

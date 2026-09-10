@@ -8,6 +8,7 @@ import { SceneController } from '../viewport/SceneController.js'
 
 const props = defineProps({
   timeline: { type: Object, default: null },
+  theme: { type: String, default: 'light' },
 })
 const emit = defineEmits(['time'])
 
@@ -17,6 +18,7 @@ let scene = null // plain var on purpose -- NOT reactive
 onMounted(() => {
   scene = new SceneController(canvas.value)
   scene.onTime = (t, playing, duration) => emit('time', { t, playing, duration })
+  scene.setTheme(props.theme)
   if (props.timeline) scene.setTimeline(props.timeline)
 })
 
@@ -26,6 +28,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => props.timeline, (tl) => { if (scene && tl) scene.setTimeline(tl) })
+watch(() => props.theme, (t) => scene?.setTheme(t))
 
 defineExpose({
   // playback
@@ -40,6 +43,11 @@ defineExpose({
   setFederateSize: (name, s) => scene?.setFederateSize(name, s),
   setFederateHighlight: (name, on) => scene?.setFederateHighlight(name, on),
   setFederateHalo: (name, on) => scene?.setFederateHalo(name, on),
+  setGizmoVisible: (on) => scene?.setGizmoVisible(on),
+  setUnitsVisible: (on) => scene?.setUnitsVisible(on),
+  setProjection: (mode) => scene?.setProjection(mode),
+  recenterWorld: () => scene?.recenterWorld(),
+  recenterFederate: (name) => scene?.recenterFederate(name),
 })
 </script>
 
