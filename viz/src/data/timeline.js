@@ -20,11 +20,12 @@ export function buildTimeline(sources) {
       for (const ac of frame.aircraft || []) {
         let tr = tracks.get(ac.id)
         if (!tr) {
-          tr = { id: ac.id, federate: src.federate, times: [], pos: [], quat: [] }
+          tr = { id: ac.id, federate: src.federate, times: [], pos: [], vel: [], quat: [] }
           tracks.set(ac.id, tr)
         }
         tr.times.push(t)
         tr.pos.push(ac.pos)
+        tr.vel.push(ac.vel || [0, 0, 0])
         tr.quat.push(ac.quat)
       }
     }
@@ -82,12 +83,15 @@ export class Timeline {
       const n = tr.times.length
       if (n === 0) continue
       let pos
+      let vel
       let quat
       if (t <= tr.times[0]) {
         pos = tr.pos[0]
+        vel = tr.vel[0]
         quat = tr.quat[0]
       } else if (t >= tr.times[n - 1]) {
         pos = tr.pos[n - 1]
+        vel = tr.vel[n - 1]
         quat = tr.quat[n - 1]
       } else {
         const i = bisect(tr.times, t)
@@ -95,9 +99,10 @@ export class Timeline {
         const t1 = tr.times[i + 1]
         const a = (t - t0) / (t1 - t0)
         pos = lerp3(tr.pos[i], tr.pos[i + 1], a)
+        vel = lerp3(tr.vel[i], tr.vel[i + 1], a)
         quat = nlerp4(tr.quat[i], tr.quat[i + 1], a)
       }
-      out.push({ id: tr.id, federate: tr.federate, pos, quat })
+      out.push({ id: tr.id, federate: tr.federate, pos, vel, quat })
     }
     return out
   }
@@ -109,6 +114,7 @@ function sortTrack(tr) {
   const order = tr.times.map((_, i) => i).sort((a, b) => tr.times[a] - tr.times[b])
   tr.times = order.map((i) => tr.times[i])
   tr.pos = order.map((i) => tr.pos[i])
+  tr.vel = order.map((i) => tr.vel[i])
   tr.quat = order.map((i) => tr.quat[i])
 }
 

@@ -1,42 +1,46 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { makeAircraftMesh } from './aircraftMesh.js'
-import { PALETTE, DEFAULT_AIRCRAFT_SIZE } from '../config.js'
+import { buildWorldspace } from './worldspace.js'
+import { DEFAULT_AIRCRAFT_SIZE } from '../config.js'
 
-// SceneController -- a plain (non-Vue) class owning one 3D viewport: renderer, scene,
-// camera, controls, the render loop, and the playback clock. The Vue component feeds
-// it a Timeline and control calls; it feeds back the current time via onTime().
-//
-// Convention (sim + Blender): world is Z-UP (z = altitude); axes X-red/Y-green/Z-blue.
+// SceneController -- one 3D viewport: renderer, scene, camera, controls, render loop,
+// playback clock, and the display state (per-aircraft mode, per-federate visibility/
+// size/highlight/halo). Vue feeds it a Timeline and control calls; it emits time back.
+// Convention: Z-up world, X-red/Y-green/Z-blue axes.
+
+const HIGHLIGHT_SCALE = 1.7
 
 export class SceneController {
   constructor(canvas) {
     this.canvas = canvas
     this._raf = null
-    this.onTime = null // (t, playing, duration) => void
+    this.onTime = null
 
-    // playback state
+    // playback
     this.timeline = null
     this.currentTime = 0
     this.playing = false
     this.speed = 1
-    this.aircraftSize = DEFAULT_AIRCRAFT_SIZE
 
-    // --- Renderer ---
+    // display state
+    this.aircraftMode = new Map() // id -> 'show' | 'hide' | 'highlight'
+    this.fedVisible = new Map() // name -> bool
+    this.fedSize = new Map() // name -> metres
+    this.fedOf = new Map() // id -> federate name
+    this._fedBoxes = new Map() // name -> { box, halo }
+
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    // --- Scene ---
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(PALETTE.background)
+    this.scene.background = new THREE.Color(0xf7f7f5)
 
-    // --- Camera (Z-up), framed to the data once a timeline loads ---
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1e7)
     this.camera.up.set(0, 0, 1)
     this.camera.position.set(8, -8, 6)
     this.camera.lookAt(0, 0, 0)
 
-    // --- Controls: middle-drag orbits about center; wheel zoom; L/R drag pans ---
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
@@ -46,17 +50,18 @@ export class SceneController {
       RIGHT: THREE.MOUSE.PAN,
     }
 
-    // --- Lights (for the aircraft's standard material) ---
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.8))
     const key = new THREE.DirectionalLight(0xffffff, 0.85)
     key.position.set(1, -1, 2)
     this.scene.add(key)
 
-    // groups we rebuild whenever the timeline changes
-    this.worldGroup = new THREE.Group() // room + axes
-    this.fleetGroup = new THREE.Group() // aircraft meshes
-    this.scene.add(this.worldGroup, this.fleetGroup)
-    this.meshes = new Map() // aircraft id -> mesh
+    this.worldGroup = new THREE.Group() // room + axes + grids
+    this.overlayGroup = new THREE.Group() // federate boxes / halos
+    this.fleetGroup = new THREE.Group() // aircraft
+    this.scene.add(this.worldGroup, this.overlayGroup, this.fleetGroup)
+    this.meshes = new Map() // id -> mesh
+    this.worldspace = null
+    this.world = null // {min,max}
 
     this._clock = new THREE.Clock()
     this._onResize = this._onResize.bind(this)
@@ -68,49 +73,109 @@ export class SceneController {
     this._raf = requestAnimationFrame(this._loop)
   }
 
-  // --- public API (called from Vue) ---
+  // --- timeline / fleet --------------------------------------------------------
 
   setTimeline(timeline) {
     this.timeline = timeline
     this.currentTime = 0
 
     this._clearGroup(this.worldGroup)
+    this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
     this.meshes.clear()
+    this._fedBoxes.clear()
 
-    const world = this._worldBounds(timeline.bounds)
-    this._buildRoom(world)
-    this._buildAxes(world)
+    this.world = this._worldBounds(timeline.bounds)
+    this.worldspace = buildWorldspace(this.world)
+    this.worldGroup.add(this.worldspace.group)
 
+    // default display state
+    this.fedOf.clear()
+    for (const f of timeline.federates) {
+      if (!this.fedVisible.has(f.name)) this.fedVisible.set(f.name, true)
+      if (!this.fedSize.has(f.name)) this.fedSize.set(f.name, DEFAULT_AIRCRAFT_SIZE)
+    }
     for (const ac of timeline.aircraft) {
+      this.fedOf.set(ac.id, ac.federate)
+      if (!this.aircraftMode.has(ac.id)) this.aircraftMode.set(ac.id, 'show')
       const mesh = makeAircraftMesh(ac.color)
-      mesh.scale.setScalar(this.aircraftSize / 2) // base mesh is ~2 units long
       this.fleetGroup.add(mesh)
       this.meshes.set(ac.id, mesh)
     }
 
-    this._frameCamera(world)
+    this._frameCamera(this.world)
+    this._refreshFleet()
     this._applyTime()
   }
 
-  setAircraftSize(size) {
-    this.aircraftSize = size
-    const s = size / 2
-    for (const mesh of this.meshes.values()) mesh.scale.setScalar(s)
+  // --- display controls (called from the panel) --------------------------------
+
+  setAircraftMode(id, mode) {
+    this.aircraftMode.set(id, mode)
+    this._refreshFleet()
   }
 
-  play() {
-    this.playing = true
+  setFederateVisible(name, visible) {
+    this.fedVisible.set(name, visible)
+    this._refreshFleet()
   }
-  pause() {
-    this.playing = false
+
+  setFederateSize(name, size) {
+    this.fedSize.set(name, size)
+    this._refreshFleet()
   }
-  togglePlay() {
-    this.playing = !this.playing
+
+  setFederateHighlight(name, on) {
+    this._ensureFedBox(name)
+    this._fedBoxes.get(name).box.visible = on
   }
-  setSpeed(s) {
-    this.speed = s
+
+  setFederateHalo(name, on) {
+    this._ensureFedBox(name)
+    this._fedBoxes.get(name).halo.visible = on
   }
+
+  // Recompute every mesh's visibility, scale, and emphasis from the display state.
+  _refreshFleet() {
+    for (const [id, mesh] of this.meshes) {
+      const fed = this.fedOf.get(id)
+      const mode = this.aircraftMode.get(id) || 'show'
+      const fedOn = this.fedVisible.get(fed) !== false
+      const highlight = mode === 'highlight'
+
+      mesh.visible = fedOn && mode !== 'hide'
+      const size = this.fedSize.get(fed) || DEFAULT_AIRCRAFT_SIZE
+      mesh.scale.setScalar((size / 2) * (highlight ? HIGHLIGHT_SCALE : 1))
+      mesh.material.emissive.setHex(highlight ? mesh.material.color.getHex() : 0x000000)
+      mesh.material.emissiveIntensity = highlight ? 0.55 : 0
+    }
+  }
+
+  // For now a federate "owns" the whole worldspace, so its box IS the worldspace
+  // border (a strong dashed cuboid); the halo is an outward offset. When federates
+  // own sectors, this becomes the union of their sectors.
+  _ensureFedBox(name) {
+    if (this._fedBoxes.has(name)) return
+    const color = this._fedColor(name)
+    const box = dashedBox(this.world, color, this._worldMaxExtent() * 0.02, 2.2)
+    const halo = dashedBox(this._expand(this.world, 0.06), color, this._worldMaxExtent() * 0.02, 1.2)
+    box.visible = false
+    halo.visible = false
+    this.overlayGroup.add(box, halo)
+    this._fedBoxes.set(name, { box, halo })
+  }
+
+  _fedColor(name) {
+    const f = this.timeline?.federates.find((f) => f.name === name)
+    return f ? f.color : 0x333333
+  }
+
+  // --- playback ---------------------------------------------------------------
+
+  play() { this.playing = true }
+  pause() { this.playing = false }
+  togglePlay() { this.playing = !this.playing }
+  setSpeed(s) { this.speed = s }
   seek(t) {
     if (!this.timeline) return
     this.currentTime = Math.max(0, Math.min(t, this.timeline.duration))
@@ -122,15 +187,13 @@ export class SceneController {
     this._resizeObserver.disconnect()
     this.controls.dispose()
     this._clearGroup(this.worldGroup)
+    this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
     this.renderer.dispose()
   }
 
-  // --- world building ---
+  // --- helpers ----------------------------------------------------------------
 
-  // Placeholder worldspace box until the sim emits real world params (a meta line):
-  // take the data AABB, fold in the origin so the axes cross at (0,0,0), stop any
-  // dimension from collapsing to a sliver, then pad. Gives a real cuboid to inhabit.
   _worldBounds(dataBounds) {
     const min = [...dataBounds.min]
     const max = [...dataBounds.max]
@@ -156,39 +219,20 @@ export class SceneController {
     return { min, max }
   }
 
-  // The worldspace "room": a box drawn with BackSide, so only the faces BEHIND the
-  // scene render. Near walls/floor never occlude; the far walls, and the ceiling when
-  // you look from below, appear on their own. This is the backwall behaviour requested.
-  _buildRoom(world) {
-    const size = [world.max[0] - world.min[0], world.max[1] - world.min[1], world.max[2] - world.min[2]]
-    const center = [(world.min[0] + world.max[0]) / 2, (world.min[1] + world.max[1]) / 2, (world.min[2] + world.max[2]) / 2]
-    const geom = new THREE.BoxGeometry(size[0], size[1], size[2])
-    const mat = new THREE.MeshBasicMaterial({ color: PALETTE.walls, side: THREE.BackSide })
-    const room = new THREE.Mesh(geom, mat)
-    room.position.set(center[0], center[1], center[2])
-    this.worldGroup.add(room)
-    this._worldMaxExtent = Math.max(...size)
+  _expand(b, frac) {
+    const min = [...b.min]
+    const max = [...b.max]
+    for (let i = 0; i < 3; i++) {
+      const m = (max[i] - min[i]) * frac
+      min[i] -= m
+      max[i] += m
+    }
+    return { min, max }
   }
 
-  // Thicker axes than AxesHelper's 1px lines: colored rods through the origin, each
-  // spanning the cuboid along its dimension.
-  _buildAxes(world) {
-    const r = (this._worldMaxExtent || 1) * 0.0016
-    this.worldGroup.add(this._rod([world.min[0], 0, 0], [world.max[0], 0, 0], PALETTE.axisX, r))
-    this.worldGroup.add(this._rod([0, world.min[1], 0], [0, world.max[1], 0], PALETTE.axisY, r))
-    this.worldGroup.add(this._rod([0, 0, world.min[2]], [0, 0, world.max[2]], PALETTE.axisZ, r))
-  }
-
-  _rod(from, to, color, radius) {
-    const a = new THREE.Vector3(...from)
-    const b = new THREE.Vector3(...to)
-    const dir = new THREE.Vector3().subVectors(b, a)
-    const len = dir.length() || 1e-6
-    const geom = new THREE.CylinderGeometry(radius, radius, len, 12)
-    const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color }))
-    mesh.position.copy(a).add(b).multiplyScalar(0.5)
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
-    return mesh
+  _worldMaxExtent() {
+    const b = this.world
+    return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
   }
 
   _frameCamera(world) {
@@ -211,8 +255,6 @@ export class SceneController {
     this.controls.update()
   }
 
-  // --- per-frame ---
-
   _applyTime() {
     if (!this.timeline) return
     for (const s of this.timeline.sample(this.currentTime)) {
@@ -228,10 +270,11 @@ export class SceneController {
     if (this.playing && this.timeline) {
       const dur = this.timeline.duration
       this.currentTime += dt * this.speed
-      if (this.currentTime >= dur) this.currentTime = 0 // loop the replay
+      if (this.currentTime >= dur) this.currentTime = 0
       this._applyTime()
     }
     this.controls.update()
+    if (this.worldspace) this.worldspace.update(this.camera)
     this.renderer.render(this.scene, this.camera)
     if (this.onTime) {
       this.onTime(this.currentTime, this.playing, this.timeline ? this.timeline.duration : 0)
@@ -253,8 +296,32 @@ export class SceneController {
     for (let i = group.children.length - 1; i >= 0; i--) {
       const child = group.children[i]
       group.remove(child)
-      child.geometry?.dispose()
-      child.material?.dispose()
+      child.traverse?.((o) => {
+        o.geometry?.dispose?.()
+        o.material?.map?.dispose?.()
+        o.material?.dispose?.()
+      })
     }
   }
+}
+
+// A dashed wireframe cuboid for federate borders / halos.
+function dashedBox(bounds, color, dash, opacity) {
+  const size = [
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  ]
+  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...size))
+  const line = new THREE.LineSegments(
+    edges,
+    new THREE.LineDashedMaterial({ color, dashSize: dash, gapSize: dash * 0.6, transparent: true, opacity }),
+  )
+  line.position.set(
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  )
+  line.computeLineDistances()
+  return line
 }

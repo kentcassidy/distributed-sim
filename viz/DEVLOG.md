@@ -2,6 +2,20 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
+## 2026-09-09 (c) — control panel + axis/grid system
+
+- **Far-wall grids**: 3 flat grids (`worldspace.js`) that park on the far walls and
+  follow the camera as you orbit (matplotlib-style). Major + minor gridlines; kept the
+  volumetric room fill. Grids inset slightly to avoid z-fighting the walls.
+- **Axes**: arrowheads at the + tips, axis letters, and numeric tick units along X/Y/Z
+  (canvas-texture sprites, depth-test off so they stay legible).
+- **Federation control** (panel top): per-federate show/hide, highlight (draws a strong
+  dashed bounding box — = the whole worldspace for now, since one federate owns all),
+  optional halo (outward offset box), and a size slider for all its aircraft.
+- **Per-aircraft containers**: collapsible; show/hide/highlight mode; live stats
+  (pos/vel/speed/alt) sampled at the current time when expanded.
+- Timeline now carries velocity too (for the stats).
+
 ## 2026-09-09 (b) — auto-ingest + worldspace + playback
 
 - **Auto-ingest**: Vite dev plugin serves repo-root `sim_out/` at `/sim_out/`

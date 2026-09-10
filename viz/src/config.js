@@ -2,8 +2,10 @@
 
 export const PALETTE = {
   background: 0xf7f7f5, // soft off-white ground
-  walls: 0xeceae3,      // worldspace room walls (subtle)
-  grid: 0xdedcd4,       // (reserved) floor gridlines
+  walls: 0xeceae3,      // worldspace room walls (subtle, "volumetric" fill)
+  gridMinor: 0xdcdad2,  // fine gridlines on the far walls
+  gridMajor: 0xc4c2b8,  // coarse gridlines
+  tick: '#8a887f',      // axis tick numbers (CSS color for canvas text)
   axisX: 0xdb5a4b,      // red
   axisY: 0x5aa02c,      // green
   axisZ: 0x3b7fd4,      // blue
@@ -18,6 +20,6 @@ export function federateColor(index = 0) {
 // Aircraft are markers, sized in WORLD UNITS (metres). Real aircraft are tiny next
 // to a multi-kilometre worldspace; this is the default marker LENGTH, tweakable live.
 export const DEFAULT_AIRCRAFT_SIZE = 40
-export const AIRCRAFT_SIZE_RANGE = { min: 5, max: 300 }
+export const AIRCRAFT_SIZE_RANGE = { min: 5, max: 400 }
 
 export const hexToCss = (hex) => '#' + hex.toString(16).padStart(6, '0')
