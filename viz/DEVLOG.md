@@ -2,7 +2,34 @@
 
 A local, viewer-only journal (separate from the project devlog). Newest first.
 
-## 2026-09-09 — skeleton stood up
+## 2026-09-09 (b) — auto-ingest + worldspace + playback
+
+- **Auto-ingest**: Vite dev plugin serves repo-root `sim_out/` at `/sim_out/`
+  (`index.json` lists files; each file streamed). Drop `.ndjson` in, reload, it loads.
+  Dev-only convenience; the federate still just emits files.
+- Confirmed the REAL schema from F1/F2: `{"t",aircraft:[{id,pos,vel,quat}]}` — no
+  `meta`/`role` yet (that evolution still pending). Loader tolerates a future meta line.
+- **Data layer**: `ndjson.js` (parse, crash-safe), `timeline.js` (merge federate files
+  into per-aircraft tracks; lerp pos + nlerp quat; data bounds; `sample(t)`), `loader.js`.
+- **Worldspace**: a placeholder cuboid auto-derived from data bounds (folds in origin,
+  stops any axis collapsing to a sliver, pads). Room walls via a **BackSide box** —
+  only far walls/ceiling render, near ones never occlude (the requested backwall +
+  "ceiling from underside" behaviour). Thicker RGB **axis rods** through the origin
+  spanning the cuboid. Camera auto-frames the box.
+- **Aircraft**: one mesh per id, **colored by federate** (F1 orange, F2 blue), sized in
+  world units via a **left-panel size slider** (default 40 m — tiny vs the ~2 km box).
+- **Playback**: timeline strip (play/pause, scrub, speed, time readout); clock lives in
+  the SceneController; autoplay on load; replay loops.
+- Panel now lists federates + aircraft with color swatches.
+
+### Open / to confirm
+- "all vs tagged" size control — implemented a single size slider for now; need to know
+  what all-vs-tagged should switch between (needs selection/tagging, not built yet).
+- Floor gridlines were dropped in favour of the room; can bring them back on the floor.
+- Worldspace bounds are a PLACEHOLDER (data-derived); swap for real sim world params
+  once the emitter provides them (the meta line).
+
+## 2026-09-09 (a) — skeleton stood up
 
 - Chose the stack: **Vue + Vite + Three.js** (plain Three inside a Vue component;
   skipped TresJS for legibility/control). Vite is dev-server only — the federate

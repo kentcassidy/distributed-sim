@@ -148,11 +148,19 @@ void AircraftFederate::initWorld(wstring federateName) {
     // the last character of the name (aircraft-1 -> 1) so the two federates' planes
     // fly parallel, visibly distinct lanes.
     unsigned int tail = 1;
+    if (federateName == L"F2") { // temp. See ref to random number below.
+        tail = 2;
+    }
+    
     wchar_t c = federateName.empty() ? L'1' : federateName.back();
     if (c >= L'0' && c <= L'9') tail = (unsigned int)(c - L'0');
 
     AircraftParams params;          // arbitrary-but-stable filler (see AircraftParams.hpp)
     params.id = tail;
+
+
+    // Create random coordinates + starting attitude + maybe speed, using federateName as a seed (for now)
+    // Will evolve to randomly distributed point cloud generator?
 
     // Cruise straight down +x at trim speed (so the u,w perturbations start at 0), in
     // a lane offset on y, with a small initial pitch so the linear dynamics visibly
@@ -167,7 +175,7 @@ void AircraftFederate::initWorld(wstring federateName) {
 
     // NDJSON viewer log, one file per federate (the viewer merges by timestamp).
     string fname(federateName.begin(), federateName.end());
-    log_.open(fname + ".ndjson");
+    log_.open("sim_out/" + fname + ".ndjson");
     log_ << setprecision(9);
 
     wcout << L"World ready: 1 aircraft, id=" << tail
