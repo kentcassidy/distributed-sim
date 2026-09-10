@@ -1,0 +1,4 @@
+/* Minimal reset. Desmos-clean: light, quiet, no chrome we didn't ask for. */
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; height: 100%; }
+body { background: #ffffff; }
