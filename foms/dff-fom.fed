@@ -25,6 +25,34 @@
     )
   )
   (interactions
-    (class InteractionRoot reliable timestamp)
+    ;; Control-plane messages for config-driven partitioning (ADR-0015). No datatypes in
+    ;; .fed form -> every parameter is an opaque byte buffer we encode via Encoding.*,
+    ;; exactly like the object attributes. All 'receive' order: these are commands
+    ;; delivered as they arrive (no time management yet).
+    (class InteractionRoot reliable timestamp
+      ;; federate -> controller: "I have joined; here is my name." The controller collects
+      ;; these into the roster; K = roster size when the user starts the run.
+      (class Enroll reliable receive
+        (parameter FederateName)
+      )
+      ;; controller -> federate: "you (TargetFederate) own EntityId, starting from this
+      ;; state." One interaction per entity; re-sending one later is how migration will
+      ;; reassign ownership.
+      (class AssignEntity reliable receive
+        (parameter TargetFederate)
+        (parameter EntityId)
+        (parameter Position)
+        (parameter Velocity)
+        (parameter Orientation)
+      )
+      ;; controller -> all: "begin," carrying the shared run config (fixed dt + the world
+      ;; volume). Disseminating the bounds gives every owner identical inputs and later
+      ;; feeds handoff-partner discovery / ghost rendering.
+      (class StartRun reliable receive
+        (parameter Dt)
+        (parameter WorldMin)
+        (parameter WorldMax)
+      )
+    )
   )
 )

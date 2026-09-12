@@ -1,6 +1,8 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <thread>       // std::this_thread::sleep_for -- join-race backoff
+#include <chrono>
 #include <RTI/RTI1516.h>
 #include <RTI/RTIambassadorFactory.h>
 #include "AircraftFederate.hpp"
@@ -77,8 +79,30 @@ void AircraftFederate::createAndJoin(wstring federateName) {
         wcout << L"Federation already existed; joining it (NOTE: my FOM edits are NOT reloaded)" << endl;
     }
 
-    this->rtiamb->joinFederationExecution(federateName, L"Aircraft", FEDERATION);
-    wcout << L"Joined as " << federateName << endl;
+    // JOIN with bounded retry. createFederationExecution is NOT atomic w.r.t. a concurrent
+    // join: when federates launch simultaneously, one creates while another tries to join
+    // mid-creation, and Portico dereferences not-yet-committed federation state -> a Java
+    // NullPointerException surfaced here as RTIinternalError. It is transient, so we back
+    // off and retry instead of dying in the startup race. (Once the CONTROLLER is the sole
+    // creator -- slice 4 -- this rarely fires, but it stays as cheap CI/busy-host insurance.)
+    const int  maxAttempts = 20;
+    const auto backoff      = std::chrono::milliseconds(150);
+    for (int attempt = 1; ; ++attempt) {
+        try {
+            this->rtiamb->joinFederationExecution(federateName, L"Aircraft", FEDERATION);
+            wcout << L"Joined as " << federateName << endl;
+            return;
+        } catch (FederationExecutionDoesNotExist&) {
+            // The creator has not committed the federation yet (or just tore it down).
+            if (attempt >= maxAttempts) throw;
+        } catch (RTIinternalError&) {
+            // The mid-creation NPE race. Transient -- wait and retry.
+            if (attempt >= maxAttempts) throw;
+        }
+        wcout << L"  join attempt " << attempt
+              << L" hit the startup race; retrying in 150ms..." << endl;
+        std::this_thread::sleep_for(backoff);
+    }
 }
 
 ////////////////////
@@ -148,9 +172,6 @@ void AircraftFederate::initWorld(wstring federateName) {
     // the last character of the name (aircraft-1 -> 1) so the two federates' planes
     // fly parallel, visibly distinct lanes.
     unsigned int tail = 1;
-    if (federateName == L"F2") { // temp. See ref to random number below.
-        tail = 2;
-    }
     
     wchar_t c = federateName.empty() ? L'1' : federateName.back();
     if (c >= L'0' && c <= L'9') tail = (unsigned int)(c - L'0');
@@ -166,7 +187,7 @@ void AircraftFederate::initWorld(wstring federateName) {
     // a lane offset on y, with a small initial pitch so the linear dynamics visibly
     // oscillate -- proof the integrator + derivative are actually running.
     State s0;
-    s0.position = Vec3(0.0, tail * 500.0, 0.0);
+    s0.position = Vec3(0.0, tail * 100.0, 0.0);
     s0.velocity = Vec3(params.trimSpeed, 0.0, 0.0);
     s0.attitude = Quat(0.0, 0.02, 0.0, 1.0);   // ~0.04 rad pitch; renormalized on first step
 

@@ -1,0 +1,9 @@
+9-11-26.txt
+
+Note about Portico to remember to present -- it came with a join race condition leading to nullptr dereferencing,
+simply because the library was not atomic. This was encountered, identified, then permanently resolved in my build (by time of prod lol).
+
+Difference between test-and-set vs compare-and-swap
+
+Sim layer HLA is pub/sub and just a star/bus through RTI. Logical bus through JGroups Mesh?
+Large scale looks like trees: federations of federations stitched by bridge or gateway federates. Holy shit how did this guy not even consider to ask me about my networking expertise? I am unbelievably pissed.

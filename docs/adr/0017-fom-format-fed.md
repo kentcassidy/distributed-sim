@@ -64,3 +64,15 @@ partition-invariance byte-agreement is deliberately controlled anyway (ADR-0006)
   Portico as vendored, not the reverse (cf. ADR-0014).
 - Supersedes nothing. ADR-0001 (1516e **interface**) is unaffected; this records a
   FOM **format** decision no prior ADR covered.
+
+## Update — 2026-09-12
+
+The control-plane interactions for config-driven partitioning (`Enroll`,
+`AssignEntity`, `StartRun`) were added to **`dff-fom.fed` only**. This confirms and
+hardens the decision: **`.fed` is the single maintained FOM.** `dff-fom.xml` is
+reference-only and now intentionally behind (it lacks the interactions and would need
+its datatype table re-authored to catch up). Empirically re-confirmed that Portico
+2.1.0 runs the `.fed`; the `.xml` remains the one it rejected. Reviving the XML would be
+its own superseding ADR — until then, `.fed` is authoritative and the `.xml` should not
+be assumed to load. (Schema is expressible in both; the difference is that `.fed`
+carries no datatypes, so `Encoding.*` owns the wire layout — see the Decision above.)

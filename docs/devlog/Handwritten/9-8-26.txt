@@ -9,6 +9,7 @@ B747 / standard-transport derivative set from Etkin & Reid. Heavier and less cle
 
 BTW take note for presentation: "Integrated a mixed-standard C++ build — C++17 model core with gnu++14 RTI-facing federate/controller — against the vendored Portico/1516e RTI, pinning the whole program to Portico's pre-C++11 libstdc++ ABI so state crosses the core/RTI seam without runtime layout mismatch."
 
+Assumptions to discuss -- the worldspace is truly flat. No spherical gravity or centrifugal calcs, no WGS 84 geodetic / J2.
 
   The one-line summary
 

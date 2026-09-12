@@ -1,32 +1,41 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// controller — the sector-assignment federate.
+// controller — the federation manager / sector-assignment federate.
 //
-// It joins the federation as a dedicated coordinator. For the MVP its job is
-// deliberately small: LOAD a scenario/partition config file and DELEGATE —
-// compute (or simply read) the sector -> federate assignment once at startup,
-// publish it, and let each aircraft federate adopt its sector and run. That is
-// the whole MVP behaviour; it does not rebalance while the run is live.
+// SOLE creator of the federation and coordinator of config-driven partitioning
+// (ADR-0015). Start it FIRST, then the aircraft federates. It waits for you to press
+// ENTER once they've joined, then divides the world into K = (number joined) slabs,
+// assigns each aircraft by its start position, disseminates the assignments, and
+// broadcasts the go signal. All physics stays behind dff_core; this target, like the
+// aircraft federate, is one of the only places allowed to include Portico headers.
 //
-// Why a real federate and not just a config file every process reads: it gives
-// dynamic rebalancing (reassigning sectors by live capability) a home LATER
-// without changing the topology, and it matches the "central controller" model
-// — the seam is here even though the MVP only walks through it statically.
-//
-// Note on authority: the controller ASSIGNS who owns each sector; it is NOT an
-// arbiter of physics. Once a sector is owned by exactly one federate, HLA
-// ownership already guarantees a single authoritative computation there — the
-// convergence comes from that singularity, not from the controller ranking sims.
-//
-// Right now this stub just proves the wiring.
+// Run from the repo root (the FOM and scenario paths are resolved against the CWD):
+//     ./controller                              # default scenarios/two_aircraft.csv
+//     ./controller scenarios/two_aircraft.csv
 // ─────────────────────────────────────────────────────────────────────────────
 #include <iostream>
+#include <string>
+#include "ControllerFederate.hpp"
 
-#include "dff_core.hpp"
+using namespace std;
 
-int main() {
-    std::cout << "controller skeleton — linked against "
-              << dff::core_version() << "\n";
-    std::cout << "TODO(MVP): load scenario config, assign sectors -> federates, "
-                 "publish assignment.\n";
+int main(int argc, char* argv[]) {
+    wstring scenarioPath = L"scenarios/two_aircraft.csv";
+    if (argc > 1) {
+        string a(argv[1]);
+        scenarioPath.assign(a.begin(), a.end());   // ASCII narrow -> wide
+    }
+
+    try {
+        ControllerFederate controller;
+        controller.run(scenarioPath);
+    } catch (const rti1516e::Exception& e) {
+        wcerr << L"[controller] RTI exception: " << e.what() << endl;
+        return 1;
+    } catch (const std::exception& e) {
+        // loadScenario / assignEntities config errors surface here (std::runtime_error).
+        cerr << "[controller] error: " << e.what() << endl;
+        return 1;
+    }
+
     return 0;
 }
