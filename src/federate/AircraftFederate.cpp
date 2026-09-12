@@ -138,13 +138,20 @@ void AircraftFederate::publishAndSubscribe() {
 // 5b. Announce ourselves to the controller (Enroll interaction)
 //////////
 void AircraftFederate::sendEnroll(wstring federateName) {
+    // Let declaration management SETTLE first. A freshly-joined federate may not yet know
+    // the controller SUBSCRIBES to Enroll, and an interaction sent before that subscription
+    // is known is routed to nobody (silently lost). Pump a few callbacks so the pub/sub
+    // picture propagates, THEN send.
+    for (int i = 0; i < 5; ++i) this->rtiamb->evokeMultipleCallbacks(0.05, 0.1);
+
     ParameterHandleValueMap params;
     params[this->enrollFederateName] = encodeString(federateName);
     VariableLengthData tag((void*)"enroll", 7);
     this->rtiamb->sendInteraction(this->enrollClass, params, tag);
     wcout << L"Enrolled with the controller as " << federateName << endl;
-    // Nudge the callback pump so the enroll actually leaves before we go quiet.
-    this->rtiamb->evokeMultipleCallbacks(0.02, 0.05);
+
+    // Flush the send before we move on.
+    for (int i = 0; i < 3; ++i) this->rtiamb->evokeMultipleCallbacks(0.02, 0.05);
 }
 
 ////////////////////

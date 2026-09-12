@@ -152,10 +152,17 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
     // Tile the volume into K slabs and assign each entity by its initial position.
     vector<Sector>    sectors    = tileVolume(WORLD_MIN, WORLD_MAX, SPLIT_AXIS, K);
     map<EntityId,int> assignment = assignEntities(scn, WORLD_MIN, WORLD_MAX, SPLIT_AXIS, K);
-    (void)sectors;   // geometry not disseminated yet (handoff slice); silence unused
 
-    wcout << L"\n[controller] K=" << K << L": partitioning " << assignment.size()
-          << L" entit(y/ies) across " << K << L" federate(s):" << endl;
+    // Show the slab geometry so the spatial partition is legible. Split axis is Y here, so
+    // print each slab's half-open Y range and its owner -- including any IDLE slab whose
+    // range holds no aircraft (that owner simply gets no AssignEntity).
+    wcout << L"\n[controller] K=" << K << L": world Y[" << WORLD_MIN.y << L"," << WORLD_MAX.y
+          << L") split into " << K << L" slab(s):" << endl;
+    for (size_t i = 0; i < sectors.size(); ++i) {
+        wcout << L"  slab " << i << L": y in [" << sectors[i].min.y << L", "
+              << sectors[i].max.y << L") -> owner " << roster[i] << endl;
+    }
+    wcout << L"[controller] assigning " << assignment.size() << L" entit(y/ies):" << endl;
 
     // One AssignEntity per entity -> the federate owning its slab.
     VariableLengthData assignTag((void*)"assign", 7);
