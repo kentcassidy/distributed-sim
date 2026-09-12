@@ -26,9 +26,10 @@ public:
 private:
     // lifecycle steps, called in order by run()
     void connectToRti();
-    void createAndJoin(wstring federateName);
+    void joinFederation(wstring federateName);    // join-only: the controller is sole creator
     void cacheHandles();
     void publishAndSubscribe();
+    void sendEnroll(wstring federateName);         // announce this federate to the controller
     void registerOwnAircraft();
     void waitForUser();          // demo barrier; skipped in non-interactive (CI) runs
     void initWorld(wstring federateName);   // build this federate's physics + open the NDJSON log
@@ -46,6 +47,10 @@ private:
     AttributeHandle   positionHandle;
     AttributeHandle   velocityHandle;
     AttributeHandle   orientationHandle;
+
+    // Control-plane interaction handles (Enroll: federate -> controller).
+    InteractionClassHandle enrollClass;
+    ParameterHandle        enrollFederateName;
 
     ObjectInstanceHandle ownAircraft;   // the single aircraft this federate owns
 

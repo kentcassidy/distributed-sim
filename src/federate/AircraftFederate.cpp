@@ -9,10 +9,9 @@
 
 using namespace std;
 
-// Fixed for the MVP handshake. FOM_MODULE is resolved against the process working
-// directory, so run both federates from the repo root (or pass an absolute path).
+// Fixed identity. The controller CREATES the federation (sole creator); this federate
+// only joins, so it no longer needs the FOM path.
 static const wstring FEDERATION     = L"DffFederation";
-static const wstring FOM_MODULE     = L"foms/dff-fom.fed";      // 1.3 .fed for bring-up; XML is the eventual deliverable
 static const wstring AIRCRAFT_CLASS = L"ObjectRoot.Aircraft";   // .fed root is ObjectRoot, not HLAobjectRoot
 
 // unique_ptr<RTIambassador> needs the complete type where it's destroyed, so the
@@ -25,9 +24,10 @@ AircraftFederate::~AircraftFederate() {}
 //////////
 void AircraftFederate::run(wstring federateName, bool interactive) {
     connectToRti();
-    createAndJoin(federateName);
+    joinFederation(federateName);
     cacheHandles();
     publishAndSubscribe();
+    sendEnroll(federateName);
     registerOwnAircraft();
     initWorld(federateName);
 
@@ -64,43 +64,28 @@ void AircraftFederate::connectToRti() {
 }
 
 ////////////////////
-// 2-3. Create (idempotent) + join
+// 2-3. Join (JOIN ONLY -- the controller is the sole creator)
 //////////
-void AircraftFederate::createAndJoin(wstring federateName) {
-    // Whichever federate starts first creates the execution; the rest just join.
-    // Pass the FOM as a MODULE LIST (what both shipped examples do) rather than a
-    // bare string — the single-string overload doesn't load it the same way.
-    try {
-        vector<wstring> fomModules;
-        fomModules.push_back(FOM_MODULE);
-        this->rtiamb->createFederationExecution(FEDERATION, fomModules);
-        wcout << L"Created federation " << FEDERATION << L" (fresh, from " << FOM_MODULE << L")" << endl;
-    } catch (FederationExecutionAlreadyExists&) {
-        wcout << L"Federation already existed; joining it (NOTE: my FOM edits are NOT reloaded)" << endl;
-    }
-
-    // JOIN with bounded retry. createFederationExecution is NOT atomic w.r.t. a concurrent
-    // join: when federates launch simultaneously, one creates while another tries to join
-    // mid-creation, and Portico dereferences not-yet-committed federation state -> a Java
-    // NullPointerException surfaced here as RTIinternalError. It is transient, so we back
-    // off and retry instead of dying in the startup race. (Once the CONTROLLER is the sole
-    // creator -- slice 4 -- this rarely fires, but it stays as cheap CI/busy-host insurance.)
-    const int  maxAttempts = 20;
-    const auto backoff      = std::chrono::milliseconds(150);
+void AircraftFederate::joinFederation(wstring federateName) {
+    // The controller creates the federation (SOLE creator -- this removes the concurrent-
+    // create race that used to split federates into isolated executions). So START THE
+    // CONTROLLER FIRST; this federate only JOINS, retrying with backoff until the
+    // federation exists. FederationExecutionDoesNotExist = the controller hasn't created it
+    // yet; RTIinternalError = Portico's transient mid-creation race.
+    const int  maxAttempts = 60;
+    const auto backoff      = std::chrono::milliseconds(500);
     for (int attempt = 1; ; ++attempt) {
         try {
             this->rtiamb->joinFederationExecution(federateName, L"Aircraft", FEDERATION);
             wcout << L"Joined as " << federateName << endl;
             return;
         } catch (FederationExecutionDoesNotExist&) {
-            // The creator has not committed the federation yet (or just tore it down).
+            if (attempt == 1)
+                wcout << L"Waiting for the controller to create the federation..." << endl;
             if (attempt >= maxAttempts) throw;
         } catch (RTIinternalError&) {
-            // The mid-creation NPE race. Transient -- wait and retry.
             if (attempt >= maxAttempts) throw;
         }
-        wcout << L"  join attempt " << attempt
-              << L" hit the startup race; retrying in 150ms..." << endl;
         std::this_thread::sleep_for(backoff);
     }
 }
@@ -120,6 +105,10 @@ void AircraftFederate::cacheHandles() {
 
     // hand Position to the ambassador so reflect() can match it in the value map
     this->fedamb.positionHandle = this->positionHandle;
+
+    // Control-plane: Enroll (federate -> controller).
+    this->enrollClass        = rtiamb->getInteractionClassHandle(L"InteractionRoot.Enroll");
+    this->enrollFederateName = rtiamb->getParameterHandle(enrollClass, L"FederateName");
 
     // DIAGNOSTIC: bisects the failure. If class is valid but Position is not, the
     // class loaded without its attributes (FOM attribute parse). If BOTH are
@@ -141,7 +130,21 @@ void AircraftFederate::publishAndSubscribe() {
 
     rtiamb->publishObjectClassAttributes(this->aircraftClass, attributes);
     rtiamb->subscribeObjectClassAttributes(this->aircraftClass, attributes);
-    wcout << L"Published and subscribed Aircraft.Position" << endl;
+    rtiamb->publishInteractionClass(this->enrollClass);
+    wcout << L"Published and subscribed Aircraft.Position; publishing Enroll" << endl;
+}
+
+////////////////////
+// 5b. Announce ourselves to the controller (Enroll interaction)
+//////////
+void AircraftFederate::sendEnroll(wstring federateName) {
+    ParameterHandleValueMap params;
+    params[this->enrollFederateName] = encodeString(federateName);
+    VariableLengthData tag((void*)"enroll", 7);
+    this->rtiamb->sendInteraction(this->enrollClass, params, tag);
+    wcout << L"Enrolled with the controller as " << federateName << endl;
+    // Nudge the callback pump so the enroll actually leaves before we go quiet.
+    this->rtiamb->evokeMultipleCallbacks(0.02, 0.05);
 }
 
 ////////////////////
