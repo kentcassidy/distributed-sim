@@ -1,0 +1,17 @@
+# two_aircraft.csv -- the shared scenario for the partition-invariance MVP.
+#
+# The SAME file drives every partitioning. The controller reads it once, divides the
+# world volume into K equal slabs (K = number of aircraft federates that joined before
+# start), and hands each entity's initial conditions to the federate whose slab contains
+# its start position:
+#   1 federate  (K=1): the whole volume is one sector -> it owns {1,2}
+#   2 federates (K=2): the volume splits along Y -> F1 owns {1}, F2 owns {2}
+# The assembled truth must be identical to the bit across the two runs.
+#
+# Two aircraft cruising down +x at trim speed in parallel lanes (offset on y), each with
+# a small initial pitch so the linearized longitudinal dynamics visibly oscillate. Note
+# the y offsets sit cleanly on either side of the K=2 seam (no aircraft on a boundary).
+#
+# id, x, y,    z, vx,  vy, vz, pitch
+1,    0, 500,  0, 200, 0,  0,  0.02
+2,    0, 1000, 0, 200, 0,  0,  0.02

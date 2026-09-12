@@ -52,14 +52,18 @@ Scenario loadScenario(const std::string& path) {
         ++lineNo;
         if (isSkippable(line)) continue;
 
-        // Expect exactly: id  px py pz  vx vy vz  pitch   (8 whitespace-separated fields)
+        // CSV fields, comma-separated. Turn commas into spaces and reuse the stream
+        // extractor, so any spacing works ("1,0,500" or "1, 0, 500"). Expect exactly
+        // 8 fields: id,x,y,z,vx,vy,vz,pitch.
+        for (char& ch : line) { if (ch == ',') ch = ' '; }
+
         std::istringstream ss(line);
         EntitySpec e;
         double px, py, pz, vx, vy, vz, pitch;
         if (!(ss >> e.id >> px >> py >> pz >> vx >> vy >> vz >> pitch)) {
             throw std::runtime_error(
                 "Scenario: malformed line " + std::to_string(lineNo) + " in '" + path +
-                "' (expected: id px py pz vx vy vz pitch)");
+                "' (expected: id,x,y,z,vx,vy,vz,pitch)");
         }
         // Reject trailing junk so a stray extra column is caught, not ignored.
         std::string extra;

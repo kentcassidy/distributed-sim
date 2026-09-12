@@ -37,12 +37,12 @@ struct Scenario {
     const EntitySpec* find(EntityId id) const;
 };
 
-// Load a scenario from a text file. Format -- one entity per line, whitespace-
-// separated, blank lines and '#' / ';' comment lines ignored:
+// Load a scenario from a CSV file. One entity per line, comma-separated; blank lines
+// and '#' / ';' comment lines (e.g. the header row) ignored:
 //
-//     # id   pos(x y z)      vel(x y z)      pitch(rad)
-//     1      0 500 0         200 0 0         0.02
-//     2      0 1000 0        200 0 0         0.02
+//     # id, x, y,    z, vx,  vy, vz, pitch
+//     1,    0, 500,  0, 200, 0,  0,  0.02
+//     2,    0, 1000, 0, 200, 0,  0,  0.02
 //
 // `pitch` is a convenience: a pure pitch about +y, stored as the exact half-angle
 // quaternion (0, sin(p/2), 0, cos(p/2)) so the initial attitude is already a unit

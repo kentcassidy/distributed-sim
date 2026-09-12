@@ -9,7 +9,8 @@ add_library(dff_core STATIC
     Integrator.cpp
     Collision.cpp
     World.cpp
-    Scenario.cpp)
+    Scenario.cpp
+    Partition.cpp)
 
 # PUBLIC so anything linking dff_core (the federate, the controller, tests) can
 # #include its headers by plain name.
