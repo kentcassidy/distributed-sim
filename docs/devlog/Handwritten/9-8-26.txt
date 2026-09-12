@@ -7,6 +7,9 @@ Etkin & Reid Dynamics of Flight
 B747 / standard-transport derivative set from Etkin & Reid. Heavier and less clean than above.
 
 
+BTW take note for presentation: "Integrated a mixed-standard C++ build — C++17 model core with gnu++14 RTI-facing federate/controller — against the vendored Portico/1516e RTI, pinning the whole program to Portico's pre-C++11 libstdc++ ABI so state crosses the core/RTI seam without runtime layout mismatch."
+
+
   The one-line summary
 
   The federate no longer fakes motion. It now owns a real World with one aircraft, calls world_.advance(dt) every step, and publishes that aircraft's actual integrated position. As a bonus it writes an NDJSON frame per step for the viewer. Your derivative → RK4 → World
