@@ -44,9 +44,10 @@ void AircraftFederate::run(wstring federateName, bool /*interactive*/) {
     cacheHandles();
     publishAndSubscribe();
     sendEnroll(federateName);
-    waitForStart();     // block (pumping) until the controller broadcasts StartRun
-    buildWorld();       // adopt exactly what we were assigned
-    runLoop();          // integrate + publish + log, for all owned aircraft
+    waitForStart();       // block (pumping) until the controller broadcasts StartRun
+    buildWorld();         // adopt exactly what we were assigned
+    runLoop();            // integrate + publish + log, for all owned aircraft
+    serveUntilShutdown(); // hold until the controller declares the sim complete
     resignAndDestroy();
 }
 
@@ -118,6 +119,8 @@ void AircraftFederate::cacheHandles() {
     this->startWorldMin = rtiamb->getParameterHandle(startClass, L"WorldMin");
     this->startWorldMax = rtiamb->getParameterHandle(startClass, L"WorldMax");
 
+    this->shutdownClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.Shutdown");
+
     // Give the ambassador what it needs to filter + decode the control interactions.
     fedamb.myName        = federateName_;
     fedamb.assignClass   = assignClass;
@@ -130,6 +133,7 @@ void AircraftFederate::cacheHandles() {
     fedamb.startDt       = startDt;
     fedamb.startWorldMin = startWorldMin;
     fedamb.startWorldMax = startWorldMax;
+    fedamb.shutdownClass = shutdownClass;
 
     wcout << L"[handles] aircraft.isValid=" << aircraftClass.isValid()
           << L" assign.isValid=" << assignClass.isValid()
@@ -149,7 +153,8 @@ void AircraftFederate::publishAndSubscribe() {
     rtiamb->publishInteractionClass(this->enrollClass);      // announce ourselves
     rtiamb->subscribeInteractionClass(this->assignClass);    // receive our assignments
     rtiamb->subscribeInteractionClass(this->startClass);     // receive the go signal
-    wcout << L"Published Aircraft.Position + Enroll; subscribed AssignEntity + StartRun" << endl;
+    rtiamb->subscribeInteractionClass(this->shutdownClass);  // receive the stop signal
+    wcout << L"Published Aircraft.Position + Enroll; subscribed AssignEntity + StartRun + Shutdown" << endl;
 }
 
 ////////////////////
@@ -273,6 +278,20 @@ void AircraftFederate::logFrame(double simTime) {
              << ",\"quat\":[" << s.attitude.x << "," << s.attitude.y << "," << s.attitude.z << "," << s.attitude.w << "]}";
     }
     log_ << "]}\n";
+}
+
+////////////////////
+// 8b. Hold after our steps until the controller declares the sim complete
+//////////
+void AircraftFederate::serveUntilShutdown() {
+    // Do NOT disconnect when our steps finish. Keep the callback pump running so the
+    // controller can still reach us (later: reassign an aircraft mid-run) until it
+    // broadcasts Shutdown -- there can always be more work until the sim is complete.
+    wcout << L"Steps done; holding for controller Shutdown..." << endl;
+    while (!fedamb.shutdownReceived) {
+        rtiamb->evokeMultipleCallbacks(0.1, 0.2);
+    }
+    wcout << L"Shutdown received; resigning." << endl;
 }
 
 ////////////////////

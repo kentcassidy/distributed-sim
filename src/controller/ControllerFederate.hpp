@@ -44,6 +44,7 @@ private:
     InteractionClassHandle enrollClass;
     InteractionClassHandle assignClass;
     InteractionClassHandle startClass;
+    InteractionClassHandle shutdownClass;    // broadcast to end the run
 
     ParameterHandle enrollFederateName;
     ParameterHandle assignTargetFederate;

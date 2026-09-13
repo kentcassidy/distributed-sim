@@ -43,12 +43,14 @@ public:
     wstring                myName;             // filter AssignEntity by TargetFederate
     InteractionClassHandle assignClass;
     InteractionClassHandle startClass;
+    InteractionClassHandle shutdownClass;      // controller's "end the run" signal
     ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient;
     ParameterHandle        startDt, startWorldMin, startWorldMax;
 
     // --- received from the controller ---
     vector<EntitySpec> assignments;    // entities assigned to ME (id + initial State)
     bool  startReceived = false;       // latched when StartRun arrives
+    bool  shutdownReceived = false;    // latched when Shutdown arrives
     double dt = 0.1;                   // from StartRun
     Vec3  worldMin, worldMax;          // from StartRun
 

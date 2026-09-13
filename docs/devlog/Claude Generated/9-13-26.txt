@@ -71,6 +71,14 @@ WHAT WAS BUILT (all under viz/)
      it each frame (preserving relative orbit/zoom) while the default framing stays the
      whole world. Only acts in panes showing that aircraft; clears on run switch.
 
+6) QoL ADDENDUM (end of session)
+   - Per-aircraft ORIENTATION in the stats: heading/pitch/roll (deg) derived from the
+     reported quaternion (config.js quatToEulerDeg; Z-up, nose +X). Longitudinal filler
+     shows pitch ~1 deg, heading/roll ~0.
+   - Units DECLUTTER: _updateLabels thins tick labels by on-screen spacing each frame
+     (project -> hide any within MIN_LABEL_PX=22 of the last kept), so zoomed-out views
+     keep only spaced indicators and fill back in on zoom-in.
+
 SEAM / SCHEMA
 -------------
 NDJSON_SCHEMA.md already documented the controller descriptor (world + sectors[].owner);

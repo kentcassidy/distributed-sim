@@ -38,6 +38,7 @@ private:
     void buildWorld();                            // adopt assignments -> world + objects + meta
     void runLoop();                               // integrate + publish + NDJSON, all owned
     void logFrame(double simTime);                // publish + write one NDJSON frame (all owned)
+    void serveUntilShutdown();                    // hold (keep pumping) until the controller stops us
     void resignAndDestroy();
 
     unique_ptr<RTIambassador> rtiamb;
@@ -51,7 +52,7 @@ private:
     // Interaction handles: Enroll (we publish), AssignEntity + StartRun (we subscribe)
     InteractionClassHandle enrollClass;
     ParameterHandle        enrollFederateName;
-    InteractionClassHandle assignClass, startClass;
+    InteractionClassHandle assignClass, startClass, shutdownClass;
     ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient;
     ParameterHandle        startDt, startWorldMin, startWorldMax;
 

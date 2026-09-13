@@ -6,7 +6,7 @@ import { ref, reactive, shallowRef, onMounted, onBeforeUnmount, computed } from 
 import Viewport from './components/Viewport.vue'
 import { listRuns, loadRun } from './data/loader.js'
 import { playback, advance } from './viewport/clock.js'
-import { DEFAULT_AIRCRAFT_SIZE, AIRCRAFT_SIZE_RANGE, hexToCss } from './config.js'
+import { DEFAULT_AIRCRAFT_SIZE, AIRCRAFT_SIZE_RANGE, hexToCss, quatToEulerDeg } from './config.js'
 
 const timeline = shallowRef(null)
 const status = ref('Loading sim_out…')
@@ -248,6 +248,10 @@ const liveById = computed(() => {
 })
 const f1 = (n) => (n === undefined ? '—' : n.toFixed(1))
 const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
+const att = (id) => {
+  const q = liveById.value[id]?.quat
+  return q ? quatToEulerDeg(q) : null
+}
 </script>
 
 <template>
@@ -356,6 +360,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
                 <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
                 <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
                 <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>
+                <div title="heading / pitch / roll from the reported quaternion"><dt>h/p/r°</dt><dd>{{ f1(att(a.id)?.heading) }} · {{ f1(att(a.id)?.pitch) }} · {{ f1(att(a.id)?.roll) }}</dd></div>
               </dl>
             </div>
           </div>

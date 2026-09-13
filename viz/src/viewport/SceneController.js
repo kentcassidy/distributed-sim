@@ -17,6 +17,7 @@ import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix } from '../config.js'
 // Z-up world, X-red/Y-green/Z-blue.
 
 const HIGHLIGHT_SCALE = 1.7
+const MIN_LABEL_PX = 22 // min on-screen spacing between tick units before we thin them out
 const PARTITION_TINT = 0.15 // how far a partition's shaded walls shift toward its owner hue
 const HIGHLIGHT_LW = 2 // px line width for the (fat) highlight edges -- ~1px over the default
 
@@ -539,6 +540,30 @@ export class SceneController {
       coord[e.B] = val(e.B, e.sB) + (e.sB ? off : -off)
       coord[e.C] = val(e.C, e.sC) + (e.sC ? off : -off)
       l.obj.position.set(coord[0], coord[1], coord[2])
+    }
+
+    // Declutter: per axis, project ticks to the screen and hide any that fall within
+    // MIN_LABEL_PX of the last kept one, so a zoomed-out view keeps only spaced indicators.
+    const sz = this.renderer.getSize(this._tmpSize)
+    const pv = this._tmpProj || (this._tmpProj = new THREE.Vector3())
+    const perAxis = [[], [], []]
+    for (const l of this._labels) perAxis[l.axis].push(l)
+    for (const arr of perAxis) {
+      arr.sort((a, b) => a.value - b.value)
+      let lx = -1e9
+      let ly = -1e9
+      for (const l of arr) {
+        pv.set(l.obj.position.x, l.obj.position.y, l.obj.position.z).project(camera)
+        const onScreen = pv.z < 1 && Math.abs(pv.x) <= 1.15 && Math.abs(pv.y) <= 1.15
+        const sx = (pv.x * 0.5 + 0.5) * sz.x
+        const sy = (1 - (pv.y * 0.5 + 0.5)) * sz.y
+        const spaced = Math.hypot(sx - lx, sy - ly) >= MIN_LABEL_PX
+        l.obj.visible = onScreen && spaced
+        if (l.obj.visible) {
+          lx = sx
+          ly = sy
+        }
+      }
     }
   }
 

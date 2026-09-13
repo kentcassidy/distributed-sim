@@ -109,4 +109,12 @@ void AircraftFedAmb::receiveInteraction(InteractionClassHandle theInteraction,
         wcout << L"[" << myName << L"] StartRun received (dt=" << this->dt << L")" << endl;
         return;
     }
+
+    // Shutdown: the controller has declared the sim complete. Latch it -- the federate's
+    // serve loop spins on this and then resigns.
+    if (theInteraction == this->shutdownClass) {
+        this->shutdownReceived = true;
+        wcout << L"[" << myName << L"] Shutdown received" << endl;
+        return;
+    }
 }

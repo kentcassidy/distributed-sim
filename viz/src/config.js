@@ -38,6 +38,19 @@ export const AIRCRAFT_SIZE_RANGE = { min: 5, max: 400 }
 
 export const hexToCss = (hex) => '#' + hex.toString(16).padStart(6, '0')
 
+// Heading / pitch / roll (degrees) from a quaternion [x,y,z,w]. Z-up world, nose along +X
+// (aerospace yaw-pitch-roll / Z-Y-X convention). Orientation is the only attitude datum the
+// federate emits (as the quaternion); this makes it human-readable for the stats panel.
+const RAD2DEG = 180 / Math.PI
+export function quatToEulerDeg([x, y, z, w]) {
+  const sinp = Math.max(-1, Math.min(1, 2 * (w * y - z * x)))
+  return {
+    heading: Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * RAD2DEG,
+    pitch: Math.asin(sinp) * RAD2DEG,
+    roll: Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * RAD2DEG,
+  }
+}
+
 // Blend hex color a toward hex color b by t in [0,1] (0 = all a, 1 = all b). Used to tint a
 // partition's shaded walls toward its owning federate's hue.
 export function mix(a, b, t) {

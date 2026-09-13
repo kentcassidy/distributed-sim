@@ -53,6 +53,10 @@
         (parameter WorldMin)
         (parameter WorldMax)
       )
+      ;; controller -> all: end the run. Federates HOLD (keep serving) after finishing their
+      ;; steps until this arrives, then resign together -- so there can always be more work
+      ;; (e.g. handoffs) until the controller declares the sim complete.
+      (class Shutdown reliable receive)
     )
   )
 )

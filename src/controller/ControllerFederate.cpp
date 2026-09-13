@@ -99,9 +99,10 @@ void ControllerFederate::createAndJoin() {
 // 4. Resolve + cache interaction/parameter handles (valid only once joined)
 //////////
 void ControllerFederate::cacheHandles() {
-    enrollClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.Enroll");
-    assignClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.AssignEntity");
-    startClass  = rtiamb->getInteractionClassHandle(L"InteractionRoot.StartRun");
+    enrollClass   = rtiamb->getInteractionClassHandle(L"InteractionRoot.Enroll");
+    assignClass   = rtiamb->getInteractionClassHandle(L"InteractionRoot.AssignEntity");
+    startClass    = rtiamb->getInteractionClassHandle(L"InteractionRoot.StartRun");
+    shutdownClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.Shutdown");
 
     enrollFederateName   = rtiamb->getParameterHandle(enrollClass, L"FederateName");
     assignTargetFederate = rtiamb->getParameterHandle(assignClass, L"TargetFederate");
@@ -129,7 +130,8 @@ void ControllerFederate::publishAndSubscribe() {
     rtiamb->subscribeInteractionClass(enrollClass);   // federates announce themselves
     rtiamb->publishInteractionClass(assignClass);     // we send per-entity assignments
     rtiamb->publishInteractionClass(startClass);      // we send the go signal
-    wcout << L"[controller] subscribed Enroll; publishing AssignEntity + StartRun" << endl;
+    rtiamb->publishInteractionClass(shutdownClass);   // we send the stop signal
+    wcout << L"[controller] subscribed Enroll; publishing AssignEntity + StartRun + Shutdown" << endl;
 }
 
 ////////////////////
@@ -248,11 +250,19 @@ void ControllerFederate::awaitShutdown() {
     // under the still-running aircraft federates. So stay JOINED and KEEP PUMPING: as the
     // coordinator we must service the channel so the aircraft federates can resign cleanly
     // (a blocked, non-pumping controller makes their resignFederationExecution time out).
-    wcout << L"\n[controller] Run in progress. Press ENTER to tear down the federation."
+    wcout << L"\n[controller] Run in progress. Press ENTER to end the run (broadcast Shutdown)."
           << endl;
     while (!enterPressed()) {
         rtiamb->evokeMultipleCallbacks(0.1, 0.2);
     }
+
+    // Tell every federate to stop serving and resign. They HOLD after finishing their steps
+    // until this arrives, so nobody disconnects early -- there can always be more work
+    // (handoffs) until we declare the sim complete.
+    VariableLengthData tag((void*)"stop", 5);
+    rtiamb->sendInteraction(shutdownClass, ParameterHandleValueMap(), tag);
+    wcout << L"[controller] Shutdown broadcast; waiting for federates to resign..." << endl;
+    for (int i = 0; i < 30; ++i) rtiamb->evokeMultipleCallbacks(0.1, 0.2);   // let them leave
 }
 
 ////////////////////
