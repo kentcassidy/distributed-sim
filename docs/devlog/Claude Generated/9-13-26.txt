@@ -1,103 +1,141 @@
 DEVLOG — 2026-09-13 (Claude-generated session log)
 ====================================================
 
-Focus: frontend only (viz/). Brought the viewer in line with the now-partitioned
-sim_out, built the partition RENDERING (the visual thesis), then a cosmetic pass and
-three feature items. No C++ changed this session (the core side had already grown the
-controller emit + partitioned runs; see below). All viz/ work stays walled off from the
-CMake build; the federate still only EMITS NDJSON.
+HEADLINE: The constructive MVP result is ACHIEVED and VERIFIED.
+Bit-exact partition invariance of TRUTH: the same seeded scenario, partitioned
+differently across federates (K=1 co-located vs K=2 vs K=3 split), produces an
+IDENTICAL per-aircraft trajectory to the bit -- proven by a purpose-built diff tool.
+This is the charter's headline claim (ADR-0019 / Success Criterion "partition invariance").
 
-CONTEXT AT START
-----------------
-Core side had moved: each sim_out/<run>/ is now one simulation trial, each run carries a
-controller.ndjson meta-only line with world bounds + owner-tagged sectors, and the
-federate files carry meta (sectors:[]) + frames with role. A src/diff/ truth-diff tool
-exists on the core side (the user has their own diff; NOT brought into the frontend by
-request). The viewer, still expecting flat sim_out/*.ndjson, was broken against the new
-layout. That break was the opening for this session's work.
+This entry covers the arc from partition-by-config (Sep 11) through the verified
+invariance result and the start of the migration/handoff increment (Sep 13). Prior
+sessions 9-11/9-12 were not separately logged; this consolidates them.
 
-WHAT WAS BUILT (all under viz/)
--------------------------------
-1) RUN-AWARE INGEST + RUN SELECTOR
-   - vite.config.js dev endpoint now serves runs: /sim_out/index.json -> {runs}, then
-     /sim_out/<run>/index.json -> {files}, then the raw files. Old flat files still load
-     as a run named "(root)".
-   - loader.js: listRuns() + loadRun(run). App.vue: a Run dropdown; switching resets the
-     per-run UI state + playhead.
+WHAT WAS BUILT (the constructive core, in order)
+------------------------------------------------
+1. Scenario + Partition (RTI-free, in dff_core):
+   - Scenario.hpp/.cpp: CSV loader (id-sorted, loud-failing) -> vector<EntitySpec>
+     (id + initial State). scenarios/two_aircraft.csv.
+   - Partition.hpp/.cpp: tileVolume() splits the world AABB into K equal slabs along an
+     axis; slabOf() assigns a point to a slab via a UNIFORM HALF-OPEN rule ([min,max) on
+     every axis, -1 if outside); assignEntities() maps each entity -> slab. Determinism
+     starts here (sort by id; disjoint tiling; loud config errors).
+   - Format decided with the user: CSV (not JSON/YAML); multi-file if sections ever needed.
 
-2) CONTROLLER INTERPRETATION (timeline.js)
-   - The controller source is identified unambiguously by a `world` field in its meta.
-     Its world bounds + owner-tagged sectors are captured; it contributes NO tracks and
-     does not appear as a federate.
-   - Fleet = federates that fly aircraft PLUS any sector owner, so a federate owning an
-     empty slab still shows (with a color + a slab). Names sorted for stable colors.
-   - Timeline now carries .world and .sectors.
+2. Control plane over the RTI (FOM interactions in foms/dff-fom.fed; encoded via
+   src/federate/Encoding.*, since .fed carries no datatypes):
+   - Enroll{FederateName}            fed -> controller
+   - AssignEntity{TargetFederate, EntityId, Position, Velocity, Orientation, AngularV}
+                                     controller -> fed  (full state)
+   - AssignSector{TargetFederate, SectorId, Min, Max}   controller -> fed
+   - StartRun{Dt, WorldMin, WorldMax}                   controller -> all
+   - Shutdown                                            controller -> all
+   Encoding gained encodeQuat/encodeDouble/encodeUint32/encodeString (+ decoders).
 
-3) PARTITION RENDERING (SceneController.js + worldspace.js) — the thesis
-   - Pane mode keys off its filter: exactly one federate (that owns a slab) = PARTITION
-     view; all/multiple = standard/FUSED view.
-   - Fused: whole-world gridded, shaded room (flush to controller `world`).
-   - Partition: the whole world drops to a quiet edge wireframe (+axes); that federate's
-     own slab is the lit gridded room, walls tinted toward its owner hue.
-   - "Sectors" toggle = the global reveal (every slab's fat edges + a faint face tint).
-   - Per-federate "highlight bounds" = solid FAT edges (LineSegments2, ~1px thicker than
-     WebGL basic lines can do), filter-independent so you can light up OTHER partitions
-     from inside a pane. Halo = finer dashes, a touch more opaque.
-   - Camera: fused frames the whole world (user's stated default); partition frames its
-     slab. Aircraft stay small in X because the split is Y-only over a 20 km world -> the
-     per-aircraft tracking feature (below) is the real fix.
+3. Controller = federation manager (src/controller/), promoted from stub to a real
+   federate. It is the SOLE CREATOR of the federation and the coordinator:
+   create -> join -> subscribe Enroll / publish the rest -> collect roster (live pump +
+   non-blocking ENTER via select) -> on ENTER: K = roster size, loadScenario, tileVolume,
+   assignEntities, send AssignSector per federate + AssignEntity per entity, broadcast
+   StartRun, write sim_out/controller.ndjson (world + sectors + owners, meta-only) -> hold
+   (keep pumping) until a 2nd ENTER -> broadcast Shutdown -> destroy.
+   K is chosen dynamically = number of federates that enrolled before start.
 
-4) COSMETIC PASS
-   - Always-on outer EDGES: buildEdgeFrame draws all 12 limit edges, never culled, so the
-     box reads as a box from any angle even where a face grid is hidden. Near edges (those
-     shared by two hidden faces) render solid but faint (opacity 0.25); far edges full.
-   - Slab outer edges use the OWNER color, so they separate from the grey world wireframe.
-   - ISOMETRIC FIX: wall culling, the near/far edge test, AND the units' nearest-edge pick
-     now use the orthographic view DIRECTION (getWorldDirection), not the camera point.
-     One helper, faceNear(), drives all three so perspective + isometric agree.
-   - Units: sit closer to the edge (offset 0.015 -> 0.004 of extent); in a partition pane
-     they attach to the SLAB bounds (per-partition units), world in fused.
-   - New toggles: "World frame" (hide the whole-world wireframe in a slab view, keeping
-     the axes) and "Tint" (owner-hue tinting globally). Partition tint reduced ~30%
-     (PARTITION_TINT 0.22 -> 0.15).
+4. Aircraft federate (src/federate/) reworked: JOIN-ONLY (controller creates), enrolls,
+   waits for StartRun, then builds EXACTLY the aircraft the controller assigned it (dropping
+   the old name-derived single aircraft), integrates all owned, publishes, and logs NDJSON.
 
-5) FEATURES (backlog #1, #2, #4)
-   - #2 Global size multiplier: a slider (exp map, centered 1x, 0.125x..8x, dbl-click
-     reset) scaling every federate marker on top of their own sliders.
-   - #1 Gizmo axis-click: click a gizmo axis knob to snap the view down that axis (X/Y
-     keep Z up; Z is top-down with +Y up). Capture-phase hit-test with an invisible
-     larger target per knob; stopPropagation so it doesn't also start an orbit drag.
-   - #4 Per-aircraft camera tracking: "Track camera" per aircraft; zooms in and follows
-     it each frame (preserving relative orbit/zoom) while the default framing stays the
-     whole world. Only acts in panes showing that aircraft; clears on run switch.
+5. NDJSON evolved: per-federate meta line (federate, dt, sectors) + per-frame
+   {"t","wt","aircraft":[{id, role:"owned", pos, vel, quat}]}. wt = wall-clock microseconds
+   (system_clock), METADATA ONLY -- it lets the diff show that the same LOGICAL step was
+   computed at different REAL times/interleavings while the truth stayed identical. Truth is
+   written at setprecision(17) so the decimal round-trips to the exact bits (required for a
+   bit-exact check, not just ~9 digits). t=0 is the initial state; frame t=i*dt is the
+   post-advance state at step i (off-by-one label fixed).
 
-6) QoL ADDENDUM (end of session)
-   - Per-aircraft ORIENTATION in the stats: heading/pitch/roll (deg) derived from the
-     reported quaternion (config.js quatToEulerDeg; Z-up, nose +X). Longitudinal filler
-     shows pitch ~1 deg, heading/roll ~0.
-   - Units DECLUTTER: _updateLabels thins tick labels by on-screen spacing each frame
-     (project -> hide any within MIN_LABEL_PX=22 of the last kept), so zoomed-out views
-     keep only spaced indicators and fill back in on zoom-in.
+6. dff_diff (src/diff/, standalone C++17, no RTI): the V&V tool. Takes N run directories,
+   parses per-federate NDJSON, keys truth by (entity id, logical step), and compares every
+   run bit-exactly against the first. Reports type-specific verdicts: VALUE DIVERGENCE
+   (shared point computed to different bits), COVERAGE MISMATCH (a point present in one run
+   only), NO OVERLAP. Exit 0 iff invariance holds -- CI-friendly. Also narrates the
+   EXECUTION divergence the invariance holds across (which federate owned each id; wall-clock
+   spread among federates at a step).
 
-SEAM / SCHEMA
--------------
-NDJSON_SCHEMA.md already documented the controller descriptor (world + sectors[].owner);
-the viewer consumes it exactly (controller detected by the `world` field). No emitter
-changes requested or made from the frontend side.
+THE RESULT (verified with the user)
+-----------------------------------
+- K=1 (one federate owns both aircraft) vs K=2 (one each): dff_diff reported
+  "PARTITION INVARIANCE HOLDS (bit-exact)" -- 200/200 points identical, 0 divergent,
+  0 coverage gaps. Ownership differed (entity 2: fedsolo in K=1, fed2 in K=2) and the
+  federates ran ~4 ms apart in wall-clock at a shared step -- yet the truth was bit-identical.
+- Falsification check: the user deleted one NDJSON line at random; the tool correctly flipped
+  to FAILS (coverage mismatch, "only in K1: 1"). A V&V tool that never fails isn't trustworthy;
+  this one fails when it should.
+- K=3 explored: with 2 aircraft and 3 slabs, one federate correctly owns an IDLE slab
+  (aircraft at y=500,1000 fall to the upper slab of each seam under the half-open rule, so
+  slab 0 is empty). Correct spatial behavior, not a bug.
 
-BACKLOG (viz/Revision Backlog.txt + docs/other/viz-kanban.md updated)
----------------------------------------------------------------------
-- DONE this session: run ingest + dropdown; partition rendering; near-edge fade +
-  always-on edges; isometric visibility; gizmo axis-snap; global size multiplier;
-  per-aircraft tracking. (World-box-flush + partition-folder ingest were the entry point.)
-- DROPPED (user): per-federate "skeleton" button; adjustable viewport seams.
-- REMAINING (wait on core/Live): vector-field overlay (toggle is still a stub); ghost
-  rendering / Live viewpoints (role:"ghost").
+WHY IT HOLDS
+------------
+Aircraft are INDEPENDENT in the constructive core (collision::resolveWorld is a no-op), so
+each aircraft's truth is a pure function of (its IC, dt, model, integration order). Identical
+ICs (disseminated from one scenario), identical dt (StartRun), same host/image FP, and
+precision-17 round-trip => bit-identical regardless of which federate computes it or in what
+real-time order. Invariance lives in the CONSOLIDATED, truth-keyed data, not in federate-level
+execution.
 
-HANDOFF
--------
-Frontend is at a strong stopping point; the user is set on the frontend for now. The
-viewer renders the partitioned runs and makes the partition legible (the presentation
-goal). Next frontend work is gated on the Live experiment (ghosts, vector field). The
-constructive core (K=1 vs K=2 truth diff, then migration/handoff) continues on the C++
-side, independent of viz/.
+KEY DECISIONS / FIXES ALONG THE WAY
+-----------------------------------
+- Controller as SOLE CREATOR (resolves a nasty class of Portico startup bugs): simultaneous
+  createFederationExecution calls raced -> either a mid-creation NullPointerException on join,
+  or a SPLIT-BRAIN (each federate created its own isolated "DffFederation", no reflections).
+  Fix: only the controller creates; aircraft federates are join-only with bounded retry.
+- Controller must KEEP PUMPING callbacks while waiting (non-blocking ENTER via select),
+  otherwise as coordinator it goes unresponsive and other federates' resign times out. This
+  also gives live enrollment printing and clean, coordinated teardown.
+- Enroll must let declaration management SETTLE (pump a few callbacks after publish, before
+  send) or the interaction is routed to nobody (subscription not yet known) and silently lost.
+- World corridor shortened from X=20000 to X=2500 (planes only travel ~2000).
+- Removed the vestigial "wait"/interactive ENTER-barrier plumbing (superseded by StartRun).
+
+MIGRATION / HANDOFF INCREMENT (started this session)
+----------------------------------------------------
+Reframed with the user as an OUT-OF-BOUNDS NOTICE (not a "handoff request"): the owning
+federate only reports "this aircraft left MY bounds" + full state; the CONTROLLER decides to
+reassign it to the sector it entered (retaining the entity id = the ownership transfer) OR
+declare it lost in the void. Explicit per-frame ownership is required in the NDJSON.
+  M1 done: serve-until-shutdown lifecycle (federates hold after their steps until the
+           controller broadcasts Shutdown -- "there is always more work until the sim ends").
+  M2 done: federate installs its sector (AssignSector) and detects leavers via
+           World::outOfSector() each step -- REPORT ONLY so far (no transfer yet).
+  M3 done: AssignEntity carries the FULL state incl. AngularV (needed to move a mid-flight
+           aircraft's exact physics).
+  M4 + M5 PLANNED (approved): the actual out-of-bounds notice + controller reassign/lost,
+           mid-run adoption, an explicit per-frame "owner" field, and per-aircraft
+           logical-step catch-up (tight repeated advance(dt)) so the handed-off trajectory is
+           bit-exact vs a never-handed-off run (verified by diffing the crossing scenario at
+           K=1 vs K=2). scenarios/crossing.csv exists for this (aircraft drift in Y across a
+           seam via nonzero vy). FULL SPEC: C:\Users\kentc\.claude\plans\peaceful-gliding-journal.md
+
+V&V PERFORMED (this is the whole MVP V&V, per scope)
+----------------------------------------------------
+(A) basic stable functionality (federation runs end to end), and
+(B) partition invariance (bit-exact, K=1 vs K=2 vs K=3), demonstrated AND falsifiable.
+Nothing more (the published-mode eigenvalue check stays backlogged -- filler physics has no
+external truth to verify against).
+
+STRETCH / DEFERRED (written down so they survive a context wipe)
+---------------------------------------------------------------
+- Collisions + handoff determinism: coupling would make mid-run catch-up need rollback (of
+  affected objects, or the worldstate to the crossing's logical time) or lockstep-by-controller
+  -time / ghost-proximity bounding. Likely reintroduces conservative time management. ADR it
+  when collisions land.
+- Huge aircraft population (core is already config-driven; big scenario + perf pass).
+- Tornado / storm wind field (WindField.hpp stub) -- the crown stretch.
+- Run-labeled output dirs (controller run id in StartRun -> sim_out/<runId>/) and
+  run-from-anywhere resource paths (/proc/self/exe or DFF_ROOT). See build-ergonomics-backlog.
+
+HANDOFF (for a fresh agent after a context clear)
+-------------------------------------------------
+Read order: /CLAUDE.md -> charter Scope tab -> this devlog -> MEMORY.md index. Then the
+migration plan at C:\Users\kentc\.claude\plans\peaceful-gliding-journal.md (self-contained
+spec for M4+M5). Build in the container (never on the host); run from the repo root.
