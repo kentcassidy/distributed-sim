@@ -93,8 +93,24 @@ void AircraftFedAmb::receiveInteraction(InteractionClassHandle theInteraction,
         if ((it = theParameterValues.find(assignPos))    != theParameterValues.end()) spec.initial.position = decodeVec3(it->second);
         if ((it = theParameterValues.find(assignVel))    != theParameterValues.end()) spec.initial.velocity = decodeVec3(it->second);
         if ((it = theParameterValues.find(assignOrient)) != theParameterValues.end()) spec.initial.attitude = decodeQuat(it->second);
+        if ((it = theParameterValues.find(assignAngV))   != theParameterValues.end()) spec.initial.angularV = decodeVec3(it->second);
         this->assignments.push_back(spec);
         wcout << L"[" << myName << L"] assigned entity " << spec.id << endl;
+        return;
+    }
+
+    // AssignSector: "your sector is this AABB" -- only if addressed to us.
+    if (theInteraction == this->assignSectorClass) {
+        it = theParameterValues.find(this->sectorTarget);
+        if (it == theParameterValues.end()) return;
+        if (decodeString(it->second) != this->myName) return;
+
+        Sector s;
+        if ((it = theParameterValues.find(sectorId))  != theParameterValues.end()) s.id  = decodeUint32(it->second);
+        if ((it = theParameterValues.find(sectorMin)) != theParameterValues.end()) s.min = decodeVec3(it->second);
+        if ((it = theParameterValues.find(sectorMax)) != theParameterValues.end()) s.max = decodeVec3(it->second);
+        this->assignedSectors.push_back(s);
+        wcout << L"[" << myName << L"] assigned sector " << s.id << endl;
         return;
     }
 

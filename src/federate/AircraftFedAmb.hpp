@@ -6,6 +6,7 @@
 #include <RTI/NullFederateAmbassador.h>
 #include "../core/Math.hpp"
 #include "../core/State.hpp"
+#include "../core/Sector.hpp"       // sector AABB assigned to this federate
 #include "../core/Scenario.hpp"     // EntitySpec = { id, initial State } -- an assigned entity
 
 using namespace rti1516e;
@@ -44,13 +45,16 @@ public:
     InteractionClassHandle assignClass;
     InteractionClassHandle startClass;
     InteractionClassHandle shutdownClass;      // controller's "end the run" signal
-    ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient;
+    InteractionClassHandle assignSectorClass;  // controller's "your sector is ..." message
+    ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient, assignAngV;
     ParameterHandle        startDt, startWorldMin, startWorldMax;
+    ParameterHandle        sectorTarget, sectorId, sectorMin, sectorMax;
 
     // --- received from the controller ---
-    vector<EntitySpec> assignments;    // entities assigned to ME (id + initial State)
-    bool  startReceived = false;       // latched when StartRun arrives
-    bool  shutdownReceived = false;    // latched when Shutdown arrives
+    vector<EntitySpec> assignments;      // entities assigned to ME (id + initial State)
+    vector<Sector>     assignedSectors;  // sector(s) assigned to ME
+    bool  startReceived = false;         // latched when StartRun arrives
+    bool  shutdownReceived = false;      // latched when Shutdown arrives
     double dt = 0.1;                   // from StartRun
     Vec3  worldMin, worldMax;          // from StartRun
 

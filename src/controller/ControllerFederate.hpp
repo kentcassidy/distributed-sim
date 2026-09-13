@@ -44,7 +44,8 @@ private:
     InteractionClassHandle enrollClass;
     InteractionClassHandle assignClass;
     InteractionClassHandle startClass;
-    InteractionClassHandle shutdownClass;    // broadcast to end the run
+    InteractionClassHandle shutdownClass;      // broadcast to end the run
+    InteractionClassHandle assignSectorClass;  // per-federate sector bounds
 
     ParameterHandle enrollFederateName;
     ParameterHandle assignTargetFederate;
@@ -52,7 +53,9 @@ private:
     ParameterHandle assignPosition;
     ParameterHandle assignVelocity;
     ParameterHandle assignOrientation;
+    ParameterHandle assignAngularV;
     ParameterHandle startDt;
     ParameterHandle startWorldMin;
     ParameterHandle startWorldMax;
+    ParameterHandle sectorTarget, sectorId, sectorMin, sectorMax;
 };

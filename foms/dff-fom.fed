@@ -44,6 +44,16 @@
         (parameter Position)
         (parameter Velocity)
         (parameter Orientation)
+        (parameter AngularV)
+      )
+      ;; controller -> federate: "your sector is this AABB." One per federate (its slab, even
+      ;; if currently empty), so an owner can detect an aircraft drifting out of its region
+      ;; (a handoff candidate), and an idle federate knows the region it may receive into.
+      (class AssignSector reliable receive
+        (parameter TargetFederate)
+        (parameter SectorId)
+        (parameter Min)
+        (parameter Max)
       )
       ;; controller -> all: "begin," carrying the shared run config (fixed dt + the world
       ;; volume). Disseminating the bounds gives every owner identical inputs and later

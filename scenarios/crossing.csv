@@ -1,0 +1,12 @@
+# crossing.csv -- a migration test scenario. Aircraft drift in Y (nonzero vy) so they cross
+# the Y-seam mid-run, exercising sector-leave detection (and, later, handoff).
+#
+# Under a K=2 Y-split of world Y[0,1500) the seam is at y=750:
+#   aircraft 1 starts at y=400 (slab 0) and drifts UP   -> crosses 750 around t~5.8s
+#   aircraft 2 starts at y=1100 (slab 1) and drifts DOWN -> crosses 750 around t~5.8s
+# Both stay inside the world (y ends at 1000 and 500), so it's an INTERNAL seam crossing,
+# not a world exit. Run: controller scenarios/crossing.csv, with 2 aircraft federates.
+#
+# id, x, y,    z, vx,  vy,  vz, pitch
+1,    0, 400,  0, 200,  60, 0,  0.02
+2,    0, 1100, 0, 200, -60, 0,  0.02

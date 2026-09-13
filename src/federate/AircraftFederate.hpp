@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <fstream>
 #include <RTI/RTI1516.h>
@@ -24,9 +25,8 @@ public:
     AircraftFederate();
     ~AircraftFederate();
 
-    // `interactive` is now vestigial: the run is gated by the controller's StartRun, not a
-    // local ENTER barrier. Kept for launcher compatibility.
-    void run(wstring federateName, bool interactive = false);
+    // The run is gated by the controller's StartRun broadcast -- no local ENTER barrier.
+    void run(wstring federateName);
 
 private:
     void connectToRti();
@@ -38,6 +38,7 @@ private:
     void buildWorld();                            // adopt assignments -> world + objects + meta
     void runLoop();                               // integrate + publish + NDJSON, all owned
     void logFrame(double simTime);                // publish + write one NDJSON frame (all owned)
+    void checkLeavers(int step);                  // report owned aircraft that left our sector
     void serveUntilShutdown();                    // hold (keep pumping) until the controller stops us
     void resignAndDestroy();
 
@@ -52,12 +53,15 @@ private:
     // Interaction handles: Enroll (we publish), AssignEntity + StartRun (we subscribe)
     InteractionClassHandle enrollClass;
     ParameterHandle        enrollFederateName;
-    InteractionClassHandle assignClass, startClass, shutdownClass;
-    ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient;
+    InteractionClassHandle assignClass, startClass, shutdownClass, assignSectorClass;
+    ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient, assignAngV;
     ParameterHandle        startDt, startWorldMin, startWorldMax;
+    ParameterHandle        sectorTarget, sectorId, sectorMin, sectorMax;
 
     // One HLA object instance per owned aircraft (id -> instance handle).
     map<EntityId, ObjectInstanceHandle> ownedObjects;
+
+    std::set<EntityId>   leaversSeen_;   // ids already reported as having left our sector
 
     double               dt_ = 0.1;
     LinearLongitudinal   model_;   // declared BEFORE world_ so it outlives borrowing aircraft

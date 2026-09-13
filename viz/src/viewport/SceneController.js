@@ -422,7 +422,12 @@ export class SceneController {
       const b = this.sectorOf.get(f.name) || this.world
       const { seg: box, mat } = fatBox(b, color, HIGHLIGHT_LW, 0.95)
       this._fatMaterials.push(mat)
-      const halo = dashedBox(this._expand(b, 0.06), color, this._worldMaxExtent() * 0.008, 0.62)
+      // HALO — ON HOLD (viewer-generated placeholder). Per the user, the halo region is SOURCE
+      // DATA the federates should define in meta (expected once near-seam collision lands); it
+      // must not be synthesized here. Until the meta carries it, this is a uniform-gap stand-in
+      // (constant absolute margin on every face; the old per-axis % ballooned the long-edge ends).
+      const haloMargin = this._worldMinExtent() * 0.06
+      const halo = dashedBox(this._expandBy(b, haloMargin), color, this._worldMaxExtent() * 0.008, 0.62)
       box.visible = false
       halo.visible = false
       this.overlayGroup.add(box, halo)
@@ -593,6 +598,8 @@ export class SceneController {
     }
     return { min, max }
   }
+  // Per-axis fractional padding -- fine for camera framing, but NOT for the halo (it makes the
+  // long axis's margin dwarf the short axis's). Kept for framing only.
   _expand(b, frac) {
     const min = [...b.min]
     const max = [...b.max]
@@ -603,9 +610,20 @@ export class SceneController {
     }
     return { min, max }
   }
+  // Constant absolute margin on every face -- a uniform gap from the bounds (used by the halo).
+  _expandBy(b, m) {
+    return {
+      min: [b.min[0] - m, b.min[1] - m, b.min[2] - m],
+      max: [b.max[0] + m, b.max[1] + m, b.max[2] + m],
+    }
+  }
   _worldMaxExtent() {
     const b = this.world
     return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
+  }
+  _worldMinExtent() {
+    const b = this.world
+    return Math.min(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
   }
   _worldDiag() {
     const b = this.world

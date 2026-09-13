@@ -36,7 +36,7 @@ AircraftFederate::~AircraftFederate() {}
 ////////////////////
 // Public lifecycle
 //////////
-void AircraftFederate::run(wstring federateName, bool /*interactive*/) {
+void AircraftFederate::run(wstring federateName) {
     this->federateName_ = federateName;      // needed by cacheHandles (fedamb.myName)
 
     connectToRti();
@@ -112,6 +112,7 @@ void AircraftFederate::cacheHandles() {
     this->assignPos    = rtiamb->getParameterHandle(assignClass, L"Position");
     this->assignVel    = rtiamb->getParameterHandle(assignClass, L"Velocity");
     this->assignOrient = rtiamb->getParameterHandle(assignClass, L"Orientation");
+    this->assignAngV   = rtiamb->getParameterHandle(assignClass, L"AngularV");
 
     // StartRun (controller -> all)
     this->startClass    = rtiamb->getInteractionClassHandle(L"InteractionRoot.StartRun");
@@ -120,6 +121,12 @@ void AircraftFederate::cacheHandles() {
     this->startWorldMax = rtiamb->getParameterHandle(startClass, L"WorldMax");
 
     this->shutdownClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.Shutdown");
+
+    this->assignSectorClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.AssignSector");
+    this->sectorTarget = rtiamb->getParameterHandle(assignSectorClass, L"TargetFederate");
+    this->sectorId     = rtiamb->getParameterHandle(assignSectorClass, L"SectorId");
+    this->sectorMin    = rtiamb->getParameterHandle(assignSectorClass, L"Min");
+    this->sectorMax    = rtiamb->getParameterHandle(assignSectorClass, L"Max");
 
     // Give the ambassador what it needs to filter + decode the control interactions.
     fedamb.myName        = federateName_;
@@ -130,10 +137,16 @@ void AircraftFederate::cacheHandles() {
     fedamb.assignPos     = assignPos;
     fedamb.assignVel     = assignVel;
     fedamb.assignOrient  = assignOrient;
+    fedamb.assignAngV    = assignAngV;
     fedamb.startDt       = startDt;
     fedamb.startWorldMin = startWorldMin;
     fedamb.startWorldMax = startWorldMax;
     fedamb.shutdownClass = shutdownClass;
+    fedamb.assignSectorClass = assignSectorClass;
+    fedamb.sectorTarget  = sectorTarget;
+    fedamb.sectorId      = sectorId;
+    fedamb.sectorMin     = sectorMin;
+    fedamb.sectorMax     = sectorMax;
 
     wcout << L"[handles] aircraft.isValid=" << aircraftClass.isValid()
           << L" assign.isValid=" << assignClass.isValid()
@@ -153,8 +166,9 @@ void AircraftFederate::publishAndSubscribe() {
     rtiamb->publishInteractionClass(this->enrollClass);      // announce ourselves
     rtiamb->subscribeInteractionClass(this->assignClass);    // receive our assignments
     rtiamb->subscribeInteractionClass(this->startClass);     // receive the go signal
-    rtiamb->subscribeInteractionClass(this->shutdownClass);  // receive the stop signal
-    wcout << L"Published Aircraft.Position + Enroll; subscribed AssignEntity + StartRun + Shutdown" << endl;
+    rtiamb->subscribeInteractionClass(this->shutdownClass);     // receive the stop signal
+    rtiamb->subscribeInteractionClass(this->assignSectorClass); // receive our sector bounds
+    wcout << L"Published Aircraft.Position + Enroll; subscribed AssignEntity + AssignSector + StartRun + Shutdown" << endl;
 }
 
 ////////////////////
@@ -221,6 +235,12 @@ void AircraftFederate::buildWorld() {
         ownedObjects[spec.id] = h;
     }
 
+    // Install our sector(s) from the controller's AssignSector, so outOfSector() can detect
+    // an aircraft drifting out of our region (a handoff candidate).
+    for (size_t i = 0; i < fedamb.assignedSectors.size(); ++i)
+        world_.addSector(fedamb.assignedSectors[i]);
+    wcout << L"Installed " << fedamb.assignedSectors.size() << L" sector(s)" << endl;
+
     // NDJSON log: one file per federate. meta line first. (sectors:[] for now -- 5c will
     // populate it from the disseminated partition so the viewer can draw the boxes.)
     string fname(federateName_.begin(), federateName_.end());
@@ -247,6 +267,7 @@ void AircraftFederate::runLoop() {
     logFrame(0.0);
     for (int i = 1; i <= STEPS; ++i) {
         world_.advance(dt_);        // RK4 over all owned aircraft, in order
+        checkLeavers(i);            // report any owned aircraft that left our sector
         logFrame(i * dt_);          // the just-calculated state at t = i*dt
         rtiamb->evokeMultipleCallbacks(0.05, 0.1);
     }
@@ -278,6 +299,32 @@ void AircraftFederate::logFrame(double simTime) {
              << ",\"quat\":[" << s.attitude.x << "," << s.attitude.y << "," << s.attitude.z << "," << s.attitude.w << "]}";
     }
     log_ << "]}\n";
+}
+
+////////////////////
+// 8a. Detect owned aircraft that have left our sector (M2: report only; M4: hand off)
+//////////
+void AircraftFederate::checkLeavers(int step) {
+    // outOfSector() is empty when no sectors are configured, so this is a no-op until the
+    // controller's AssignSector arrives -- and it only fires when an aircraft actually drifts
+    // out of our region (needs motion across a seam, e.g. a nonzero vy under the Y-split).
+    std::vector<EntityId> leavers = world_.outOfSector();
+    for (size_t i = 0; i < leavers.size(); ++i) {
+        EntityId id = leavers[i];
+        if (leaversSeen_.count(id)) continue;   // report each leaver once
+        leaversSeen_.insert(id);
+
+        const std::vector<Aircraft>& owned = world_.owned();
+        for (size_t k = 0; k < owned.size(); ++k) {
+            if (owned[k].id() == id) {
+                wcout << L"[" << federateName_ << L"] aircraft " << id
+                      << L" LEFT sector at step " << step
+                      << L" (pos " << owned[k].state().position << L") -- handoff candidate"
+                      << endl;
+                break;
+            }
+        }
+    }
 }
 
 ////////////////////

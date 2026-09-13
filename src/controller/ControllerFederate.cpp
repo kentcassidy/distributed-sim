@@ -21,12 +21,14 @@ using namespace std;
 static const wstring FEDERATION = L"DffFederation";
 static const wstring FOM_MODULE = L"foms/dff-fom.fed";
 
-// The run config the controller OWNS and disseminates. World bounds are half-open
-// [min,max) (the Partition rule), chosen with margin so the two hand-authored aircraft sit
-// cleanly inside and the K=2 y-seam (y=750 for a [0,1500) span) falls between their lanes
-// (500 and 1000). worldMax.x is generous but only matters at t=0 -- ownership is static.
-static const Vec3   WORLD_MIN  = Vec3(0.0,     0.0,    -500.0);
-static const Vec3   WORLD_MAX  = Vec3(20000.0, 1500.0,  500.0);
+// The run config the controller OWNS and disseminates. World bounds are half-open [min,max)
+// (the Partition rule), chosen so the two hand-authored aircraft sit cleanly inside and the
+// K=2 y-seam (y=750 for a [0,1500) span) falls between their lanes (500 and 1000). The X
+// corridor is 2500 m -- comfortably longer than the ~2000 m the aircraft cover in a 100-step
+// run, without the wasted length of a 20 km box. (Easily tuned; the X extent starts to matter
+// once we split on X for migration.)
+static const Vec3   WORLD_MIN  = Vec3(0.0,    0.0,    -500.0);
+static const Vec3   WORLD_MAX  = Vec3(2500.0, 1500.0,  500.0);
 static const Axis   SPLIT_AXIS = Axis::Y;
 static const double DT         = 0.1;
 
@@ -103,6 +105,7 @@ void ControllerFederate::cacheHandles() {
     assignClass   = rtiamb->getInteractionClassHandle(L"InteractionRoot.AssignEntity");
     startClass    = rtiamb->getInteractionClassHandle(L"InteractionRoot.StartRun");
     shutdownClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.Shutdown");
+    assignSectorClass = rtiamb->getInteractionClassHandle(L"InteractionRoot.AssignSector");
 
     enrollFederateName   = rtiamb->getParameterHandle(enrollClass, L"FederateName");
     assignTargetFederate = rtiamb->getParameterHandle(assignClass, L"TargetFederate");
@@ -110,9 +113,14 @@ void ControllerFederate::cacheHandles() {
     assignPosition       = rtiamb->getParameterHandle(assignClass, L"Position");
     assignVelocity       = rtiamb->getParameterHandle(assignClass, L"Velocity");
     assignOrientation    = rtiamb->getParameterHandle(assignClass, L"Orientation");
+    assignAngularV       = rtiamb->getParameterHandle(assignClass, L"AngularV");
     startDt              = rtiamb->getParameterHandle(startClass,  L"Dt");
     startWorldMin        = rtiamb->getParameterHandle(startClass,  L"WorldMin");
     startWorldMax        = rtiamb->getParameterHandle(startClass,  L"WorldMax");
+    sectorTarget         = rtiamb->getParameterHandle(assignSectorClass, L"TargetFederate");
+    sectorId             = rtiamb->getParameterHandle(assignSectorClass, L"SectorId");
+    sectorMin            = rtiamb->getParameterHandle(assignSectorClass, L"Min");
+    sectorMax            = rtiamb->getParameterHandle(assignSectorClass, L"Max");
 
     // Hand the enroll handles to the ambassador so its callback can match + decode.
     fedamb.enrollClass       = enrollClass;
@@ -131,7 +139,8 @@ void ControllerFederate::publishAndSubscribe() {
     rtiamb->publishInteractionClass(assignClass);     // we send per-entity assignments
     rtiamb->publishInteractionClass(startClass);      // we send the go signal
     rtiamb->publishInteractionClass(shutdownClass);   // we send the stop signal
-    wcout << L"[controller] subscribed Enroll; publishing AssignEntity + StartRun + Shutdown" << endl;
+    rtiamb->publishInteractionClass(assignSectorClass); // we send each federate its sector
+    wcout << L"[controller] subscribed Enroll; publishing AssignEntity + AssignSector + StartRun + Shutdown" << endl;
 }
 
 ////////////////////
@@ -207,6 +216,19 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
     wcout << L"[controller] wrote sim_out/controller.ndjson (world + " << sectors.size()
           << L" sectors)" << endl;
 
+    // Tell each federate its sector (its slab) so it can detect an aircraft leaving its
+    // region. Sent to EVERY federate, including idle ones (they may receive a handoff later).
+    VariableLengthData secTag((void*)"sector", 7);
+    for (unsigned int i = 0; i < K; ++i) {
+        const Sector& s = sectors[i];
+        ParameterHandleValueMap sp;
+        sp[sectorTarget] = encodeString(roster[i]);
+        sp[sectorId]     = encodeUint32(s.id);
+        sp[sectorMin]    = encodeVec3(s.min);
+        sp[sectorMax]    = encodeVec3(s.max);
+        rtiamb->sendInteraction(assignSectorClass, sp, secTag);
+    }
+
     wcout << L"[controller] assigning " << assignment.size() << L" entit(y/ies):" << endl;
 
     // One AssignEntity per entity -> the federate owning its slab.
@@ -224,6 +246,7 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
         p[assignPosition]       = encodeVec3(spec->initial.position);
         p[assignVelocity]       = encodeVec3(spec->initial.velocity);
         p[assignOrientation]    = encodeQuat(spec->initial.attitude);
+        p[assignAngularV]       = encodeVec3(spec->initial.angularV);
         rtiamb->sendInteraction(assignClass, p, assignTag);
 
         wcout << L"  entity " << id << L" -> slab " << slab << L" -> " << owner << endl;

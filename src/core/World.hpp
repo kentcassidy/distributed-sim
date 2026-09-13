@@ -35,6 +35,10 @@ public:
     std::vector<Ghost>&          ghosts()        { return ghosts_; }
     const std::vector<Sector>&   sectors() const { return sectors_; }
 
+    // The federate installs its owned sector(s) here, from the controller's AssignSector.
+    // outOfSector() then has something to test against (empty => it reports nothing).
+    void addSector(const Sector& s) { sectors_.push_back(s); }
+
     // Owned aircraft that have left EVERY sector this federate owns -- the handoff
     // candidates the federate migrates. Deterministic (owned_ order). Empty when no
     // sectors are configured (no partitioning => nothing to hand off).
