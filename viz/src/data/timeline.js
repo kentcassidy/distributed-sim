@@ -51,18 +51,26 @@ export function buildTimeline(sources) {
         if (role !== 'owned') continue
         let tr = tracks.get(ac.id)
         if (!tr) {
-          tr = { id: ac.id, federate: src.federate, role, times: [], pos: [], vel: [], quat: [] }
+          tr = { id: ac.id, federate: src.federate, role, times: [], pos: [], vel: [], quat: [], owner: [] }
           tracks.set(ac.id, tr)
         }
         tr.times.push(t)
         tr.pos.push(ac.pos)
         tr.vel.push(ac.vel || [0, 0, 0])
         tr.quat.push(ac.quat)
+        // OWNER per step (explicit; the federate that computed this step). Changes across the
+        // track at a handoff crossover; the row's file order is NOT reliable, so we key on this.
+        tr.owner.push(ac.owner || src.federate)
       }
     }
   }
 
-  for (const tr of tracks.values()) sortTrack(tr)
+  // Sort each track by logical time, then stamp the HOME federate = the earliest owner (a track
+  // spans multiple files under migration, so first-file-seen is wrong -- owner[0] after sort is right).
+  for (const tr of tracks.values()) {
+    sortTrack(tr)
+    tr.federate = tr.owner[0] || tr.federate
+  }
 
   // time range + data bounds
   let tMin = Infinity
@@ -120,14 +128,17 @@ export class Timeline {
       let pos
       let vel
       let quat
+      let owner
       if (t <= tr.times[0]) {
         pos = tr.pos[0]
         vel = tr.vel[0]
         quat = tr.quat[0]
+        owner = tr.owner[0]
       } else if (t >= tr.times[n - 1]) {
         pos = tr.pos[n - 1]
         vel = tr.vel[n - 1]
         quat = tr.quat[n - 1]
+        owner = tr.owner[n - 1]
       } else {
         const i = bisect(tr.times, t)
         const t0 = tr.times[i]
@@ -136,8 +147,9 @@ export class Timeline {
         pos = lerp3(tr.pos[i], tr.pos[i + 1], a)
         vel = lerp3(tr.vel[i], tr.vel[i + 1], a)
         quat = nlerp4(tr.quat[i], tr.quat[i + 1], a)
+        owner = tr.owner[i] // step function: the owner that computed the floor step
       }
-      out.push({ id: tr.id, federate: tr.federate, role: tr.role, pos, vel, quat })
+      out.push({ id: tr.id, federate: tr.federate, role: tr.role, pos, vel, quat, owner })
     }
     return out
   }
@@ -151,6 +163,7 @@ function sortTrack(tr) {
   tr.pos = order.map((i) => tr.pos[i])
   tr.vel = order.map((i) => tr.vel[i])
   tr.quat = order.map((i) => tr.quat[i])
+  tr.owner = order.map((i) => tr.owner[i])
 }
 
 // last index i with times[i] <= t (assumes times[0] < t < times[last])

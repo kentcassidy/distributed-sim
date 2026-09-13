@@ -8,7 +8,7 @@ import { makeAircraftMesh } from './aircraftMesh.js'
 import { buildWorldspace, buildWorldWireframe, niceStep, ticksFor, formatTick } from './worldspace.js'
 import { buildGizmo } from './gizmo.js'
 import { playback } from './clock.js'
-import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix } from '../config.js'
+import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix, hexToCss } from '../config.js'
 
 // SceneController -- one 3D viewport. Time comes from the shared playback clock; display
 // state (per-aircraft mode, per-federate visibility/size/highlight/halo) and a per-pane
@@ -16,8 +16,10 @@ import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix } from '../config.js'
 // instances coexist (one per pane) and all read the same clock, so they stay in sync.
 // Z-up world, X-red/Y-green/Z-blue.
 
-const HIGHLIGHT_SCALE = 1.7
+const HIGHLIGHT_SCALE = 1.2
 const MIN_LABEL_PX = 22 // min on-screen spacing between tick units before we thin them out
+const HANDOFF_FX_MS = 3200 // how long the "owner -> owner" handoff diagram floats before it's gone
+const HANDOFF_FX_HOLD = 2800 // ms at full opacity before a quick ~400ms fade-out
 const PARTITION_TINT = 0.15 // how far a partition's shaded walls shift toward its owner hue
 const HIGHLIGHT_LW = 2 // px line width for the (fat) highlight edges -- ~1px over the default
 
@@ -40,7 +42,8 @@ export class SceneController {
     this.fedSize = new Map()
     this.fedHighlight = new Map()
     this.fedHalo = new Map()
-    this.fedOf = new Map()
+    this.fedOf = new Map() // id -> HOME (initial) federate; fallback before the first sample
+    this._ownerOf = new Map() // id -> CURRENT owner (updated per frame from the sampled owner)
     this._fedBoxes = new Map()
     this.showUnits = true
     this.sizeMultiplier = 1 // global master multiplier over every federate's marker size
@@ -87,7 +90,9 @@ export class SceneController {
     this.overlayGroup = new THREE.Group()
     this.fleetGroup = new THREE.Group()
     this.labelGroup = new THREE.Group()
-    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.labelGroup)
+    this.fxGroup = new THREE.Group() // transient CSS2D effects (handoff diagrams)
+    this._handoffFx = [] // active [{id, el, obj, start}]
+    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.labelGroup, this.fxGroup)
     this.meshes = new Map()
     this.worldspace = null
     this._labels = []
@@ -157,6 +162,8 @@ export class SceneController {
 
     this._clearGroup(this.fleetGroup)
     this.meshes.clear()
+    this._ownerOf.clear() // stale owners would fire spurious handoff diagrams
+    this._clearHandoffFx()
 
     // partition geometry: keep the sectors and index them by owner
     this.sectors = timeline.sectors || []
@@ -288,7 +295,7 @@ export class SceneController {
   _canTrack(id) {
     const mesh = this.meshes.get(id)
     if (!mesh) return false
-    const fed = this.fedOf.get(id)
+    const fed = this._ownerOf.get(id) || this.fedOf.get(id)
     return this._inFilter(fed) && this.fedVisible.get(fed) !== false
   }
 
@@ -296,7 +303,7 @@ export class SceneController {
     const mesh = this.meshes.get(id)
     if (!mesh) return
     const p = mesh.position
-    const markerLen = (this.fedSize.get(this.fedOf.get(id)) || DEFAULT_AIRCRAFT_SIZE) * this.sizeMultiplier
+    const markerLen = (this.fedSize.get(this._ownerOf.get(id) || this.fedOf.get(id)) || DEFAULT_AIRCRAFT_SIZE) * this.sizeMultiplier
     const dist = Math.max(markerLen * 8, 30)
     const dir = this.camera.position.clone().sub(this.controls.target)
     if (dir.lengthSq() < 1e-9) dir.set(1, -1, 0.7)
@@ -323,6 +330,55 @@ export class SceneController {
     t.set(p.x, p.y, p.z)
   }
 
+  // --- handoff diagram (transient "owner -> owner" marker above the aircraft) --------------
+
+  _spawnHandoffFx(id, from, to) {
+    const el = document.createElement('div')
+    el.style.cssText =
+      'display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:11px;' +
+      'background:rgba(20,20,22,0.6);pointer-events:none;white-space:nowrap;'
+    const dot = (name) => {
+      const s = document.createElement('span')
+      s.style.cssText = `width:11px;height:11px;border-radius:50%;display:inline-block;background:${hexToCss(this._fedColor(name))};`
+      return s
+    }
+    const arrow = document.createElement('span')
+    arrow.textContent = '→'
+    arrow.style.cssText = 'color:#e8e8e8;font-size:13px;line-height:1;font-weight:600;'
+    el.appendChild(dot(from))
+    el.appendChild(arrow)
+    el.appendChild(dot(to))
+    const obj = new CSS2DObject(el)
+    this.fxGroup.add(obj)
+    this._handoffFx.push({ id, el, obj, start: performance.now() })
+  }
+
+  _updateHandoffFx(now) {
+    const off = this._worldMinExtent() * 0.05 // float a little above the aircraft
+    for (let i = this._handoffFx.length - 1; i >= 0; i--) {
+      const fx = this._handoffFx[i]
+      const e = now - fx.start
+      if (e >= HANDOFF_FX_MS) {
+        fx.el.remove()
+        this.fxGroup.remove(fx.obj)
+        this._handoffFx.splice(i, 1)
+        continue
+      }
+      const mesh = this.meshes.get(fx.id)
+      if (mesh) fx.obj.position.set(mesh.position.x, mesh.position.y, mesh.position.z + off)
+      const op = e < HANDOFF_FX_HOLD ? 1 : 1 - (e - HANDOFF_FX_HOLD) / (HANDOFF_FX_MS - HANDOFF_FX_HOLD)
+      fx.el.style.opacity = Math.max(0, op).toFixed(3)
+    }
+  }
+
+  _clearHandoffFx() {
+    for (const fx of this._handoffFx) {
+      fx.el.remove()
+      this.fxGroup.remove(fx.obj)
+    }
+    this._handoffFx.length = 0
+  }
+
   // --- internals ---------------------------------------------------------------
 
   _inFilter(fed) {
@@ -330,17 +386,23 @@ export class SceneController {
   }
 
   _refreshFleet() {
-    for (const [id, mesh] of this.meshes) {
-      const fed = this.fedOf.get(id)
-      const mode = this.aircraftMode.get(id) || 'show'
-      const fedOn = this.fedVisible.get(fed) !== false
-      const highlight = mode === 'highlight'
-      mesh.visible = fedOn && mode !== 'hide' && this._inFilter(fed)
-      const size = this.fedSize.get(fed) || DEFAULT_AIRCRAFT_SIZE
-      mesh.scale.setScalar((size / 2) * this.sizeMultiplier * (highlight ? HIGHLIGHT_SCALE : 1))
-      mesh.material.emissive.setHex(highlight ? mesh.material.color.getHex() : 0x000000)
-      mesh.material.emissiveIntensity = highlight ? 0.55 : 0
-    }
+    for (const [id, mesh] of this.meshes) this._styleMesh(id, mesh)
+  }
+
+  // Visibility/size/COLOR of one aircraft, keyed to its CURRENT owner (so it recolors and moves
+  // between per-federate panes at a handoff). Falls back to the home federate before first sample.
+  _styleMesh(id, mesh) {
+    const owner = this._ownerOf.get(id) || this.fedOf.get(id)
+    const mode = this.aircraftMode.get(id) || 'show'
+    const highlight = mode === 'highlight'
+    mesh.visible = this.fedVisible.get(owner) !== false && mode !== 'hide' && this._inFilter(owner)
+    const size = this.fedSize.get(owner) || DEFAULT_AIRCRAFT_SIZE
+    mesh.scale.setScalar((size / 2) * this.sizeMultiplier * (highlight ? HIGHLIGHT_SCALE : 1))
+    const col = this._fedColor(owner)
+    mesh.material.color.setHex(col)
+    mesh.material.emissive.setHex(highlight ? col : 0x000000)
+    mesh.material.emissiveIntensity = highlight ? 0.55 : 0
+    if (mesh.userData.outline) mesh.userData.outline.visible = highlight
   }
 
   // --- world / partition geometry ---------------------------------------------
@@ -445,6 +507,11 @@ export class SceneController {
   _applyResolution() {
     const s = this.renderer.getSize(this._tmpSize)
     for (const m of this._fatMaterials) m.resolution.set(s.x, s.y)
+    // aircraft selection outlines are fat lines too (created in makeAircraftMesh)
+    for (const mesh of this.meshes.values()) {
+      const o = mesh.userData.outline
+      if (o) o.material.resolution.set(s.x, s.y)
+    }
   }
 
   _frameForMode() {
@@ -463,6 +530,7 @@ export class SceneController {
     this._resizeObserver.disconnect()
     this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown, true)
     this.controls.dispose()
+    this._clearHandoffFx()
     this._clearGroup(this.worldGroup)
     this._clearGroup(this.sectorGroup)
     this._clearGroup(this.overlayGroup)
@@ -693,11 +761,19 @@ export class SceneController {
       if (!mesh) continue
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2])
       mesh.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]).normalize()
+      if (s.owner) {
+        const prev = this._ownerOf.get(s.id)
+        // Fire the diagram only on a real forward-playback ownership flip (not scrubbing/seeking).
+        if (prev && prev !== s.owner && playback.playing) this._spawnHandoffFx(s.id, prev, s.owner)
+        this._ownerOf.set(s.id, s.owner)
+      }
+      this._styleMesh(s.id, mesh) // owner-driven color/visibility, live with the handoff
     }
   }
 
   _loop() {
     if (this.timeline) this._applyTime(playback.t)
+    if (this._handoffFx.length) this._updateHandoffFx(performance.now())
     this._followTrack()
     this.controls.update()
     if (this.worldspace) this.worldspace.updateWalls(this.camera)

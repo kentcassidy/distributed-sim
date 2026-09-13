@@ -46,9 +46,10 @@ sorts by time, so trajectories reconstruct without change.
 
 - `owner` — the federate that COMPUTED this step (explicit, not inferred from the file). Under
   migration it **changes across an aircraft's track** at the crossover step: the previous owner
-  logs up to the transfer step, the new owner logs from the next step on. (Owner-per-frame
-  coloring in the viewer is a deferred item; `timeline.js` currently fixes an aircraft's
-  federate at first sighting.) Defaults to the file's federate when absent.
+  logs up to the transfer step, the new owner logs from the next step on. The viewer honors this
+  per frame: `timeline.js` carries owner-per-step, stamps the home federate as the earliest
+  owner, and the scene recolors each aircraft (and moves it between per-federate panes) live at
+  the handoff. Defaults to the file's federate when absent.
 - `wt` — wall-clock time this record was computed: integer **microseconds since the Unix
   epoch** (`system_clock`, comparable across federates on one host). **Metadata only** —
   nondeterministic, and never part of the truth/invariance check. It exists to show that the

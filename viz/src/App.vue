@@ -252,6 +252,8 @@ const att = (id) => {
   const q = liveById.value[id]?.quat
   return q ? quatToEulerDeg(q) : null
 }
+// live owner color (follows a handoff); falls back to the aircraft's home color
+const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.find((a) => a.id === id)?.css
 </script>
 
 <template>
@@ -342,7 +344,7 @@ const att = (id) => {
           <div v-for="a in g.items" :key="a.id" class="ac" @mouseenter="hovered = a.federate" @mouseleave="hovered = null">
             <div class="ac-head" @click="toggleExpand(a.id)">
               <span class="caret">{{ acUi[a.id].expanded ? '▾' : '▸' }}</span>
-              <span class="dot" :style="{ background: a.css }"></span>
+              <span class="dot" :style="{ background: ownerCss(a.id) }"></span>
               <span>id {{ a.id }}</span>
               <span class="sub">· {{ a.federate }}</span>
               <span v-if="trackedId === a.id" class="tracking" title="camera tracking">◉</span>
@@ -356,7 +358,7 @@ const att = (id) => {
               </div>
               <button class="trackbtn" :class="{ on: trackedId === a.id }" @click="toggleTrack(a.id)">{{ trackedId === a.id ? '◉ Tracking — click to stop' : '◎ Track camera' }}</button>
               <dl class="stats">
-                <div><dt>role</dt><dd>{{ a.role }} · {{ a.federate }}</dd></div>
+                <div><dt>owner</dt><dd>{{ liveById[a.id]?.owner || a.federate }}<span v-if="liveById[a.id]?.owner && liveById[a.id].owner !== a.federate" class="handoff"> ⇐ {{ a.federate }}</span></dd></div>
                 <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
                 <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
                 <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>
@@ -477,6 +479,7 @@ const att = (id) => {
 .stats > div { display: flex; justify-content: space-between; padding: 1px 0; }
 .stats dt { color: var(--muted); margin: 0; }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+.stats .handoff { color: var(--muted); font-size: 11px; }
 
 .stage { display: grid; grid-template-rows: 1fr auto; min-width: 0; min-height: 0; }
 .panes { display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr); min-width: 0; min-height: 0; }
