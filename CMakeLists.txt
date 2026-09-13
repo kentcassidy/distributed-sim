@@ -62,7 +62,15 @@ add_library(Portico::Portico ALIAS portico)
 # The standard split (C++17 core vs gnu++14 RTI code) lives per-target inside
 # each subdirectory's CMakeLists.txt; the ABI define above is shared by all.
 # ─────────────────────────────────────────────────────────────────────────────
+# All executables land in ONE place (build/bin) so the whole federation launches from a
+# short path -- build/bin/controller, build/bin/aircraft_federate, build/bin/dff_diff --
+# instead of build/src/<subdir>/<exe>. (Resource paths -- the FOM and scenarios -- are still
+# resolved against the CWD, so launch from the repo root; making those executable-relative
+# is a separate follow-up, see the build-ergonomics backlog.)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
 add_subdirectory(src/core)
 add_subdirectory(src/federate)
 add_subdirectory(src/controller)
+add_subdirectory(src/diff)
 add_subdirectory(examples/portico-example)

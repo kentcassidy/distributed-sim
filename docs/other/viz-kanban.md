@@ -71,13 +71,11 @@ Suggested columns: **Done** (1–11), **Next** (12), **Backlog** (13–16).
 
 ## Backlog
 
-13. **[BACKLOG] Adjustable viewport seams.** Draggable gutters to resize the grid tracks.
-
-14. **[BACKLOG] Ghost rendering / Live viewpoints.** Render `role:"ghost"` distinctly
+13. **[BACKLOG] Ghost rendering / Live viewpoints.** Render `role:"ghost"` distinctly
     (translucent, lagged) once the Live experiment produces dead-reckoned ghosts.
 
-15. **[BACKLOG] Sector rendering.** Draw `meta.sectors` as the real federate/sector
+14. **[BACKLOG] Sector rendering.** Draw `meta.sectors` as the real federate/sector
     boxes (replacing the current worldspace-as-federate-box placeholder).
 
-16. **[BACKLOG] Vector-field (wind/storm) overlay.** Thin arrows at grid points,
+15. **[BACKLOG] Vector-field (wind/storm) overlay.** Thin arrows at grid points,
     thickness = strength, behind the planes. Toggle exists; shows a placeholder now.

@@ -1,8 +1,12 @@
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <string>
 #include <vector>
+#include <sys/select.h>    // non-blocking stdin (Linux/container) so we can pump while waiting
+#include <unistd.h>
 #include <RTI/RTI1516.h>
 #include <RTI/RTIambassadorFactory.h>
 #include "ControllerFederate.hpp"
@@ -25,6 +29,25 @@ static const Vec3   WORLD_MIN  = Vec3(0.0,     0.0,    -500.0);
 static const Vec3   WORLD_MAX  = Vec3(20000.0, 1500.0,  500.0);
 static const Axis   SPLIT_AXIS = Axis::Y;
 static const double DT         = 0.1;
+
+// Non-blocking check for ENTER on stdin (Linux/container). Returns true once the operator
+// hits ENTER, consuming the line. This lets the controller keep PUMPING callbacks while it
+// waits -- essential, because as the federation's creator/coordinator it must service the
+// channel (so other federates can resign cleanly) rather than block unresponsive on getline.
+static bool enterPressed() {
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    struct timeval tv;
+    tv.tv_sec  = 0;
+    tv.tv_usec = 0;
+    if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
+        std::string line;
+        std::getline(std::cin, line);
+        return true;
+    }
+    return false;
+}
 
 ControllerFederate::ControllerFederate() {}
 ControllerFederate::~ControllerFederate() {}
@@ -116,20 +139,14 @@ void ControllerFederate::collectRosterUntilStart() {
     wcout << L"\n[controller] Start the aircraft federates now." << endl;
     wcout << L"[controller] Press ENTER once they have all joined to begin the run." << endl;
 
-    // Block on the operator's ENTER. Enroll interactions sent meanwhile are QUEUED by the
-    // RTI (evoked delivery) and drained right after. (A live roster print as each arrives
-    // would need non-blocking stdin; deferred as a nicety.)
-    string line;
-    getline(cin, line);
-
-    wcout << L"[controller] collecting enrollments..." << endl;
-    for (int i = 0; i < 30; ++i) {
-        rtiamb->evokeMultipleCallbacks(0.05, 0.1);
+    // Pump callbacks LIVE while waiting: enrolls arrive and print as they come, and the
+    // channel stays serviced. Break when the operator hits ENTER.
+    while (!enterPressed()) {
+        rtiamb->evokeMultipleCallbacks(0.1, 0.2);
     }
 
     if (fedamb.roster.empty()) {
-        wcout << L"[controller] WARNING: no federates enrolled -- nothing to partition. "
-                 L"(Aircraft-side Enroll lands in the next slice.)" << endl;
+        wcout << L"[controller] WARNING: no federates enrolled -- nothing to partition." << endl;
     }
 }
 
@@ -162,6 +179,32 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
         wcout << L"  slab " << i << L": y in [" << sectors[i].min.y << L", "
               << sectors[i].max.y << L") -> owner " << roster[i] << endl;
     }
+
+    // Write the controller's partition descriptor for the VIEWER: one meta-only line with the
+    // world bounds + every sector and its owner. The viz reads THIS authoritative file to draw
+    // the world/sector boxes, instead of inferring geometry from per-federate truth. It has no
+    // aircraft frames, so dff_diff ignores it (contributes no (id,step) points).
+    {
+        std::ofstream desc("sim_out/controller.ndjson");
+        desc << std::setprecision(17);
+        desc << "{\"meta\":{\"federate\":\"controller\",\"dt\":" << DT
+             << ",\"world\":{\"min\":[" << WORLD_MIN.x << "," << WORLD_MIN.y << "," << WORLD_MIN.z << "]"
+             << ",\"max\":[" << WORLD_MAX.x << "," << WORLD_MAX.y << "," << WORLD_MAX.z << "]}"
+             << ",\"sectors\":[";
+        for (size_t i = 0; i < sectors.size(); ++i) {
+            const Sector& s = sectors[i];
+            std::string owner(roster[i].begin(), roster[i].end());   // ASCII names
+            if (i) desc << ",";
+            desc << "{\"id\":" << s.id
+                 << ",\"owner\":\"" << owner << "\""
+                 << ",\"min\":[" << s.min.x << "," << s.min.y << "," << s.min.z << "]"
+                 << ",\"max\":[" << s.max.x << "," << s.max.y << "," << s.max.z << "]}";
+        }
+        desc << "]}}\n";
+    }
+    wcout << L"[controller] wrote sim_out/controller.ndjson (world + " << sectors.size()
+          << L" sectors)" << endl;
+
     wcout << L"[controller] assigning " << assignment.size() << L" entit(y/ies):" << endl;
 
     // One AssignEntity per entity -> the federate owning its slab.
@@ -202,13 +245,14 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
 //////////
 void ControllerFederate::awaitShutdown() {
     // The controller is the CREATOR; destroying now would yank the federation out from
-    // under the still-running aircraft federates. So stay JOINED (which keeps the
-    // federation alive -- JGroups services peers on its own threads) and idle until the
-    // operator ends it.
+    // under the still-running aircraft federates. So stay JOINED and KEEP PUMPING: as the
+    // coordinator we must service the channel so the aircraft federates can resign cleanly
+    // (a blocked, non-pumping controller makes their resignFederationExecution time out).
     wcout << L"\n[controller] Run in progress. Press ENTER to tear down the federation."
           << endl;
-    string line;
-    getline(cin, line);
+    while (!enterPressed()) {
+        rtiamb->evokeMultipleCallbacks(0.1, 0.2);
+    }
 }
 
 ////////////////////

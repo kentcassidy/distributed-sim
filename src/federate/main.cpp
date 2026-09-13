@@ -34,6 +34,10 @@ int main(int argc, char* argv[]) {
     } catch (const rti1516e::Exception& e) {
         wcerr << L"RTI exception: " << e.what() << endl;
         return 1;
+    } catch (const std::exception& e) {
+        // e.g. waitForStart() timing out on the controller.
+        cerr << "error: " << e.what() << endl;
+        return 1;
     }
 
     return 0;

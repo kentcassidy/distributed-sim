@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
 #include <fstream>
@@ -12,52 +13,54 @@
 using namespace rti1516e;
 using namespace std;
 
-// The orchestrator. Owns the RTIambassador (you -> RTI), the AircraftFedAmb
-// (RTI -> you), and the cached FOM handles. run() walks the whole HLA lifecycle.
-// No physics/time management yet — this is the M1 handshake: publish Position,
-// discover + reflect the other federate's aircraft.
+// The orchestrator. It no longer invents its own aircraft: it JOINS (the controller is the
+// sole creator), ENROLLS with the controller, waits for its AssignEntity messages + the
+// StartRun broadcast, builds EXACTLY the aircraft it was assigned, then integrates and
+// publishes their truth (one NDJSON file per federate). This is what makes the K=1-vs-K=2
+// partition-invariance diff possible: the same scenario, partitioned differently, must
+// produce identical per-aircraft truth.
 class AircraftFederate {
 public:
     AircraftFederate();
     ~AircraftFederate();
 
+    // `interactive` is now vestigial: the run is gated by the controller's StartRun, not a
+    // local ENTER barrier. Kept for launcher compatibility.
     void run(wstring federateName, bool interactive = false);
 
 private:
-    // lifecycle steps, called in order by run()
     void connectToRti();
-    void joinFederation(wstring federateName);    // join-only: the controller is sole creator
+    void joinFederation(wstring federateName);   // join-only: the controller is sole creator
     void cacheHandles();
     void publishAndSubscribe();
-    void sendEnroll(wstring federateName);         // announce this federate to the controller
-    void registerOwnAircraft();
-    void waitForUser();          // demo barrier; skipped in non-interactive (CI) runs
-    void initWorld(wstring federateName);   // build this federate's physics + open the NDJSON log
-    void step(double simTime, double dt);
+    void sendEnroll(wstring federateName);        // announce this federate to the controller
+    void waitForStart();                          // pump callbacks until StartRun latches
+    void buildWorld();                            // adopt assignments -> world + objects + meta
+    void runLoop();                               // integrate + publish + NDJSON, all owned
+    void logFrame(double simTime);                // publish + write one NDJSON frame (all owned)
     void resignAndDestroy();
 
-    unique_ptr<RTIambassador> rtiamb;   // ctor via factory.createRTIambassador()
-    AircraftFedAmb            fedamb;    // by value; passed to connect() by ref
+    unique_ptr<RTIambassador> rtiamb;
+    AircraftFedAmb            fedamb;
 
-    // FOM handles, resolved once after join and reused in the loop
+    // Object-class (Aircraft) handles
     ObjectClassHandle aircraftClass;
-    AttributeHandle   entityIdHandle;
-    AttributeHandle   massHandle;
-    AttributeHandle   radiusHandle;
-    AttributeHandle   positionHandle;
-    AttributeHandle   velocityHandle;
-    AttributeHandle   orientationHandle;
+    AttributeHandle   entityIdHandle, massHandle, radiusHandle;
+    AttributeHandle   positionHandle, velocityHandle, orientationHandle;
 
-    // Control-plane interaction handles (Enroll: federate -> controller).
+    // Interaction handles: Enroll (we publish), AssignEntity + StartRun (we subscribe)
     InteractionClassHandle enrollClass;
     ParameterHandle        enrollFederateName;
+    InteractionClassHandle assignClass, startClass;
+    ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient;
+    ParameterHandle        startDt, startWorldMin, startWorldMax;
 
-    ObjectInstanceHandle ownAircraft;   // the single aircraft this federate owns
+    // One HLA object instance per owned aircraft (id -> instance handle).
+    map<EntityId, ObjectInstanceHandle> ownedObjects;
 
-    // dff_core physics. model_ is declared BEFORE world_ so it OUTLIVES the aircraft
-    // that borrow it (class members are destroyed in reverse declaration order).
-    LinearLongitudinal   model_;
+    double               dt_ = 0.1;
+    LinearLongitudinal   model_;   // declared BEFORE world_ so it outlives borrowing aircraft
     World                world_;
-    ofstream             log_;            // NDJSON frames for the browser viewer
+    ofstream             log_;     // NDJSON frames for the browser viewer
     wstring              federateName_;
 };

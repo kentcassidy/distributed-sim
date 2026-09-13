@@ -4,3 +4,5 @@
 - Global slider which is a multiplier for the federate size slider. Centered at 1x.
 - For when it's available, another button per federate which shows/hides the "skeleton" of the entire worldspace in relation to it. s.t. the active bounds per federate, still the same displayed gridspace, will appear as it would inside the Overall. Fun to see where the relative spaces of each are. The greater worldspace skeleton can have dashed lines to represent the edges, but faces can remain invisible. Recenter camera position and zoom (but not orientation) on this specific toggle.
 - it seems like at the moment, the world box is responsive to be between [0 - margin, max-ac-pos + margin]. Where is this being sourced? I'm not sure the sectors were established by the time of display creation. I would like the dimensions to be flush with the defined worldbounds (axes still visible at 0 edges), which makes accurate the dotted lines and halos.
+
+**Update: at this time, there should now be NDJSON outs of clearly divided partitions, organized in dedicated folders per simulation trial. Please adjust accordingly.
