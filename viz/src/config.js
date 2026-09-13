@@ -37,3 +37,14 @@ export const DEFAULT_AIRCRAFT_SIZE = 40
 export const AIRCRAFT_SIZE_RANGE = { min: 5, max: 400 }
 
 export const hexToCss = (hex) => '#' + hex.toString(16).padStart(6, '0')
+
+// Blend hex color a toward hex color b by t in [0,1] (0 = all a, 1 = all b). Used to tint a
+// partition's shaded walls toward its owning federate's hue.
+export function mix(a, b, t) {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255
+  const r = Math.round(ar + (br - ar) * t)
+  const g = Math.round(ag + (bg - ag) * t)
+  const bl = Math.round(ab + (bb - ab) * t)
+  return (r << 16) | (g << 8) | bl
+}

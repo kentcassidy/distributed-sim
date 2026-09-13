@@ -4,7 +4,7 @@
 // to panes as PROPS. The left region is two collapsible panels: Controls | Aircraft.
 import { ref, reactive, shallowRef, onMounted, onBeforeUnmount, computed } from 'vue'
 import Viewport from './components/Viewport.vue'
-import { loadSimOut } from './data/loader.js'
+import { listRuns, loadRun } from './data/loader.js'
 import { playback, advance } from './viewport/clock.js'
 import { DEFAULT_AIRCRAFT_SIZE, AIRCRAFT_SIZE_RANGE, hexToCss } from './config.js'
 
@@ -13,10 +13,15 @@ const status = ref('Loading sim_out…')
 const aircraft = ref([])
 const federates = ref([])
 
+// runs (one folder per simulation trial in sim_out/)
+const runs = ref([])
+const currentRun = ref(null)
+
 // world / view options
 const theme = ref('light')
 const showGizmo = ref(true)
 const showUnits = ref(true)
+const showSectors = ref(false)
 const isometric = ref(false)
 const showVectorField = ref(false)
 const projection = computed(() => (isometric.value ? 'isometric' : 'perspective'))
@@ -123,11 +128,18 @@ function onKey(e) {
     seek(currentT.value + dir * step)
   }
 }
-onMounted(async () => {
-  window.addEventListener('keydown', onKey)
-  rafId = requestAnimationFrame(frame)
+// Load one run (folder) into the view, resetting the per-run UI state (federate + aircraft
+// controls, viewpoint selection, playhead). Reused by the initial load and the run dropdown.
+async function openRun(run) {
+  status.value = `Loading ${run}…`
   try {
-    const tl = await loadSimOut()
+    const tl = await loadRun(run)
+    currentRun.value = run
+    // clear state keyed to the previous run
+    for (const k of Object.keys(fedUi)) delete fedUi[k]
+    for (const k of Object.keys(selected)) delete selected[k]
+    for (const k of Object.keys(acUi)) delete acUi[k]
+    filterFed.value = 'all'
     for (const f of tl.federates) {
       fedUi[f.name] = { visible: true, highlight: false, halo: false, size: DEFAULT_AIRCRAFT_SIZE }
       selected[f.name] = true
@@ -138,15 +150,30 @@ onMounted(async () => {
     federates.value = tl.federates.map((f) => ({ ...f, css: hexToCss(f.color) }))
     playback.duration = tl.duration
     playback.t = 0
-    playback.speed = 1
+    playback.speed = speed.value
     playback.playing = true
     duration.value = tl.duration
+    currentT.value = 0
     playing.value = true
     status.value = `${aircraft.value.length} aircraft · ${federates.value.length} federate(s) · ${tl.duration.toFixed(1)}s`
   } catch (e) {
-    status.value = 'Could not load sim_out/: ' + e.message
+    status.value = `Could not load run "${run}": ` + e.message
     console.error(e)
   }
+}
+
+onMounted(async () => {
+  window.addEventListener('keydown', onKey)
+  rafId = requestAnimationFrame(frame)
+  try {
+    runs.value = await listRuns()
+  } catch (e) {
+    status.value = 'Could not list sim_out/: ' + e.message
+    console.error(e)
+    return
+  }
+  if (runs.value.length) await openRun(runs.value[0])
+  else status.value = 'No runs found in sim_out/'
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
@@ -219,6 +246,12 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
         <h1>DFF Viewer</h1>
         <p class="status">{{ status }}</p>
 
+        <label class="run" v-if="runs.length">Run
+          <select :value="currentRun" @change="openRun($event.target.value)">
+            <option v-for="r in runs" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </label>
+
         <section>
           <h2>World</h2>
           <div class="seg small">
@@ -232,6 +265,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
           <label class="opt"><input type="checkbox" :checked="theme === 'dark'" @change="toggleTheme" /> Dark mode</label>
           <label class="opt"><input type="checkbox" :checked="showGizmo" @change="showGizmo = $event.target.checked" /> Axis gizmo</label>
           <label class="opt"><input type="checkbox" :checked="showUnits" @change="showUnits = $event.target.checked" /> Units</label>
+          <label class="opt"><input type="checkbox" :checked="showSectors" @change="showSectors = $event.target.checked" /> Sectors</label>
           <label class="opt"><input type="checkbox" :checked="isometric" @change="isometric = $event.target.checked" /> Isometric</label>
           <label class="opt"><input type="checkbox" v-model="showVectorField" /> Vector field</label>
           <button class="wbtn" @click="recenterWorld">⊕ Recenter world</button>
@@ -317,7 +351,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
           :style="{ gridColumn: cell.span > 1 ? 'span ' + cell.span : null, borderColor: hovered && hovered === cell.federate ? cell.css : 'var(--border)' }"
           @mouseenter="hovered = cell.federate" @mouseleave="hovered = null">
           <Viewport :timeline="timeline" :theme="theme" :filter="cell.filter" :aircraft-modes="acModes" :federate-states="fedUi"
-            :show-gizmo="showGizmo" :show-units="showUnits" :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
+            :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
           <div class="pane-title"><span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}</div>
         </div>
       </div>
@@ -359,6 +393,8 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
 
 .panel h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: -0.2px; }
 .status { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
+.run { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.run select { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--card-bg); color: var(--text); font-size: 12px; }
 .panel h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 16px 0 6px; }
 .panel-body > h2:first-child { margin-top: 0; }
 .count { color: var(--muted); font-weight: 400; }

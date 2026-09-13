@@ -11,18 +11,36 @@ import { federateColor } from '../config.js'
 
 export function buildTimeline(sources) {
   const tracks = new Map() // id -> {id, federate, role, times[], pos[], vel[], quat[]}
-  const federateNames = []
   let dt = null
-  const sectors = []
+  let world = null // authoritative {min,max}, from the controller meta (else null)
+  const sectors = [] // [{id, owner, min, max}], from the controller meta
 
+  // The CONTROLLER source is the one whose meta declares `world` -- it carries the run
+  // geometry (world bounds + owner-tagged sectors) and NO tracks. Federates never emit a
+  // `world`, so this is an unambiguous test. We take its geometry and drop it from the
+  // fleet (it is not an aircraft-bearing federate).
+  const frameSources = []
   for (const src of sources) {
-    if (!federateNames.includes(src.federate)) federateNames.push(src.federate)
-    if (src.meta) {
-      if (dt == null && src.meta.dt != null) dt = src.meta.dt
-      if (Array.isArray(src.meta.sectors)) {
-        for (const s of src.meta.sectors) sectors.push({ ...s, owner: s.owner || src.federate })
+    const m = src.meta
+    if (m) {
+      if (dt == null && m.dt != null) dt = m.dt
+      if (m.world) world = { min: [...m.world.min], max: [...m.world.max] }
+      if (Array.isArray(m.sectors)) {
+        for (const s of m.sectors) sectors.push({ id: s.id, owner: s.owner || src.federate, min: s.min, max: s.max })
       }
     }
+    if (m && m.world) continue // controller: geometry only, contributes no tracks
+    frameSources.push(src)
+  }
+
+  // Federates = those that carry frames, PLUS any sector owner (so a federate that owns an
+  // empty slab still shows in the fleet + gets a partition box). Sorted for stable colors.
+  const federateNames = []
+  for (const src of frameSources) if (!federateNames.includes(src.federate)) federateNames.push(src.federate)
+  for (const s of sectors) if (s.owner && !federateNames.includes(s.owner)) federateNames.push(s.owner)
+  federateNames.sort()
+
+  for (const src of frameSources) {
     for (const frame of src.frames) {
       const t = frame.t
       for (const ac of frame.aircraft || []) {
@@ -72,19 +90,20 @@ export function buildTimeline(sources) {
     color: colorOf.get(tr.federate),
   }))
 
-  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max }, dt, sectors })
+  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max }, dt, sectors, world })
 }
 
 export class Timeline {
-  constructor({ tracks, aircraft, federates, tMin, tMax, bounds, dt, sectors }) {
+  constructor({ tracks, aircraft, federates, tMin, tMax, bounds, dt, sectors, world }) {
     this.tracks = tracks
     this.aircraft = aircraft
     this.federates = federates
     this.tMin = Number.isFinite(tMin) ? tMin : 0
     this.tMax = Number.isFinite(tMax) ? tMax : 0
-    this.bounds = bounds
+    this.bounds = bounds // data-space AABB over aircraft positions (fallback world)
     this.dt = dt ?? null
-    this.sectors = sectors || []
+    this.sectors = sectors || [] // [{id, owner, min, max}]
+    this.world = world || null // authoritative world AABB from the controller, or null
   }
 
   get duration() {

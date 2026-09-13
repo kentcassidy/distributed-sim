@@ -6,3 +6,5 @@
 - it seems like at the moment, the world box is responsive to be between [0 - margin, max-ac-pos + margin]. Where is this being sourced? I'm not sure the sectors were established by the time of display creation. I would like the dimensions to be flush with the defined worldbounds (axes still visible at 0 edges), which makes accurate the dotted lines and halos.
 
 **Update: at this time, there should now be NDJSON outs of clearly divided partitions, organized in dedicated folders per simulation trial. Please adjust accordingly.
+
+- Per-aircraft camera tracking selector from the panel: pick an aircraft and have the camera zoom in and follow it, while the default view stays framed on the whole world. (Added 9-12-26.)

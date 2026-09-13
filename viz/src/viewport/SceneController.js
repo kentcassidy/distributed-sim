@@ -1,11 +1,14 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { makeAircraftMesh } from './aircraftMesh.js'
-import { buildWorldspace, niceStep, ticksFor, formatTick } from './worldspace.js'
+import { buildWorldspace, buildWorldWireframe, niceStep, ticksFor, formatTick } from './worldspace.js'
 import { buildGizmo } from './gizmo.js'
 import { playback } from './clock.js'
-import { DEFAULT_AIRCRAFT_SIZE, THEMES } from '../config.js'
+import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix } from '../config.js'
 
 // SceneController -- one 3D viewport. Time comes from the shared playback clock; display
 // state (per-aircraft mode, per-federate visibility/size/highlight/halo) and a per-pane
@@ -14,6 +17,8 @@ import { DEFAULT_AIRCRAFT_SIZE, THEMES } from '../config.js'
 // Z-up world, X-red/Y-green/Z-blue.
 
 const HIGHLIGHT_SCALE = 1.7
+const PARTITION_TINT = 0.22 // how far a partition's shaded walls shift toward its owner hue
+const HIGHLIGHT_LW = 2 // px line width for the (fat) highlight edges -- ~1px over the default
 
 export class SceneController {
   constructor(canvas) {
@@ -37,6 +42,13 @@ export class SceneController {
     this.fedOf = new Map()
     this._fedBoxes = new Map()
     this.showUnits = true
+
+    // partition geometry (from the controller meta)
+    this.sectors = [] // [{id, owner, min, max}]
+    this.sectorOf = new Map() // owner name -> {min,max}
+    this.showSectors = false // the global "reveal every slab" toggle (off = clean default)
+    this._sole = null // the sole federate this pane shows (partition view), else null
+    this._fatMaterials = [] // LineMaterials needing a pixel-resolution uniform on resize
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -63,10 +75,11 @@ export class SceneController {
     this.scene.add(key)
 
     this.worldGroup = new THREE.Group()
+    this.sectorGroup = new THREE.Group() // owner-colored partition boxes
     this.overlayGroup = new THREE.Group()
     this.fleetGroup = new THREE.Group()
     this.labelGroup = new THREE.Group()
-    this.scene.add(this.worldGroup, this.overlayGroup, this.fleetGroup, this.labelGroup)
+    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.labelGroup)
     this.meshes = new Map()
     this.worldspace = null
     this._labels = []
@@ -128,16 +141,18 @@ export class SceneController {
   setTimeline(timeline) {
     this.timeline = timeline
 
-    this._clearGroup(this.worldGroup)
-    this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
     this.meshes.clear()
-    this._fedBoxes.clear()
 
-    this.world = this._worldBounds(timeline.bounds)
-    this.worldspace = buildWorldspace(this.world, this.palette)
-    this.worldGroup.add(this.worldspace.group)
-    this._buildLabels()
+    // partition geometry: keep the sectors and index them by owner
+    this.sectors = timeline.sectors || []
+    this.sectorOf.clear()
+    for (const s of this.sectors) this.sectorOf.set(s.owner, { min: s.min, max: s.max })
+
+    // World box: prefer the controller's authoritative bounds (drawn FLUSH, so the sectors,
+    // halos and 0-edges line up); fall back to padded data bounds when a run has no controller
+    // meta (the old flat files).
+    this.world = timeline.world ? { min: [...timeline.world.min], max: [...timeline.world.max] } : this._worldBounds(timeline.bounds)
 
     this.fedOf.clear()
     for (const f of timeline.federates) {
@@ -152,19 +167,25 @@ export class SceneController {
       this.meshes.set(ac.id, mesh)
     }
 
-    this._frameCamera(this.world)
+    this._buildWorldGeometry()
     this._refreshBoxes()
     this._refreshFleet()
+    this._frameForMode()
     this._applyTime(playback.t)
   }
 
   // --- applied from Vue --------------------------------------------------------
 
   setViewFilter(filter) {
-    // null (or undefined) = all federates; an array = only those names (empty = none)
+    // null (or undefined) = all federates; an array = only those names (empty = none). A pane
+    // filtered to exactly one federate (that owns a slab) is a PARTITION view; anything else is
+    // the standard/fused view. The distinction drives the whole render, so rebuild geometry.
+    const prevSole = this._sole
     this.viewFilter = Array.isArray(filter) ? filter : null
-    this._refreshFleet()
+    this._buildWorldGeometry()
     this._refreshBoxes()
+    this._refreshFleet()
+    if (this.world && this._sole !== prevSole) this._frameForMode()
   }
 
   applyAircraftModes(modes) {
@@ -188,10 +209,8 @@ export class SceneController {
     this.palette = THEMES[theme] || THEMES.light
     this.scene.background = new THREE.Color(this.palette.background)
     if (this.world) {
-      this._clearGroup(this.worldGroup)
-      this.worldspace = buildWorldspace(this.world, this.palette)
-      this.worldGroup.add(this.worldspace.group)
-      this._buildLabels()
+      this._buildWorldGeometry()
+      this._refreshBoxes()
     }
     this._disposeScene(this.gizmo.scene)
     this.gizmo = buildGizmo(this.palette)
@@ -205,6 +224,14 @@ export class SceneController {
     this.showUnits = on
     this.labelGroup.visible = on
     for (const l of this._labels) l.obj.visible = on
+  }
+
+  setSectorsVisible(on) {
+    // The global reveal: light every slab's edges + tint its faces (the fused-view equivalent
+    // of turning on highlight for all federates). Rebuild, but don't move the camera.
+    this.showSectors = on
+    this._buildWorldGeometry()
+    this._refreshBoxes()
   }
 
   recenterWorld() {
@@ -237,28 +264,101 @@ export class SceneController {
     }
   }
 
-  _refreshBoxes() {
-    if (!this.world) return
-    for (const [name, on] of this.fedHighlight) {
-      this._ensureFedBox(name)
-      this._fedBoxes.get(name).box.visible = on && this._inFilter(name)
+  // --- world / partition geometry ---------------------------------------------
+
+  // The sole federate this pane shows (partition view), or null (standard/fused view).
+  _soleFederate() {
+    if (Array.isArray(this.viewFilter) && this.viewFilter.length === 1) {
+      const name = this.viewFilter[0]
+      if (this.sectorOf.has(name)) return name
     }
-    for (const [name, on] of this.fedHalo) {
-      this._ensureFedBox(name)
-      this._fedBoxes.get(name).halo.visible = on && this._inFilter(name)
+    return null
+  }
+
+  // Rebuild world furniture + partition reveals + per-federate overlay boxes. Chooses the
+  // treatment from the pane's filter: a single-federate pane draws the world as a wireframe
+  // with only that federate's tinted, gridded slab; a fused pane draws the full gridded world.
+  _buildWorldGeometry() {
+    this._clearGroup(this.worldGroup)
+    this._clearGroup(this.sectorGroup)
+    this._clearGroup(this.overlayGroup)
+    this._fedBoxes.clear()
+    this._fatMaterials = []
+    this.worldspace = null
+    if (!this.world) {
+      this._sole = null
+      return
+    }
+
+    const sole = this._soleFederate()
+    this._sole = sole
+
+    if (sole) {
+      // partition view: quiet world wireframe (edges + axes) + this slab as the lit, tinted room
+      const wf = buildWorldWireframe(this.world, this.palette, { axes: true })
+      this.worldGroup.add(wf.group)
+      const slab = this.sectorOf.get(sole)
+      const wallColor = mix(this.palette.walls, this._fedColor(sole), PARTITION_TINT)
+      this.worldspace = buildWorldspace(slab, this.palette, { axes: false, wallColor })
+      this.worldGroup.add(this.worldspace.group)
+      if (this.showSectors) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s)
+    } else {
+      // standard/fused view: the whole world as the gridded, shaded room
+      this.worldspace = buildWorldspace(this.world, this.palette, { axes: true })
+      this.worldGroup.add(this.worldspace.group)
+      if (this.showSectors) for (const s of this.sectors) this._addSectorReveal(s)
+    }
+
+    this._buildOverlays()
+    this._buildLabels()
+    this._applyResolution()
+  }
+
+  // A revealed slab: fat owner-colored edges + a faint owner-tinted volume. Used by the global
+  // "Sectors" reveal (and, in a partition view, for the OTHER slabs).
+  _addSectorReveal(sec) {
+    const color = this._fedColor(sec.owner)
+    const { seg, mat } = fatBox(sec, color, HIGHLIGHT_LW, 0.8)
+    this.sectorGroup.add(seg)
+    this._fatMaterials.push(mat)
+    this.sectorGroup.add(faceTint(sec, color, 0.1))
+  }
+
+  // Per-federate highlight (fat solid edges) + halo (fine dashes), one per federate, hidden
+  // until toggled. Filter-INDEPENDENT: you can light up another partition from inside a pane.
+  _buildOverlays() {
+    if (!this.timeline) return
+    for (const f of this.timeline.federates) {
+      const color = this._fedColor(f.name)
+      const b = this.sectorOf.get(f.name) || this.world
+      const { seg: box, mat } = fatBox(b, color, HIGHLIGHT_LW, 0.95)
+      this._fatMaterials.push(mat)
+      const halo = dashedBox(this._expand(b, 0.06), color, this._worldMaxExtent() * 0.008, 0.62)
+      box.visible = false
+      halo.visible = false
+      this.overlayGroup.add(box, halo)
+      this._fedBoxes.set(f.name, { box, halo })
     }
   }
 
-  _ensureFedBox(name) {
-    if (this._fedBoxes.has(name)) return
-    const color = this._fedColor(name)
-    const box = dashedBox(this.world, color, this._worldMaxExtent() * 0.02, 0.95)
-    const halo = dashedBox(this._expand(this.world, 0.06), color, this._worldMaxExtent() * 0.02, 0.45)
-    box.visible = false
-    halo.visible = false
-    this.overlayGroup.add(box, halo)
-    this._fedBoxes.set(name, { box, halo })
+  _refreshBoxes() {
+    for (const [name, b] of this._fedBoxes) {
+      b.box.visible = !!this.fedHighlight.get(name)
+      b.halo.visible = !!this.fedHalo.get(name)
+    }
   }
+
+  _applyResolution() {
+    const s = this.renderer.getSize(this._tmpSize)
+    for (const m of this._fatMaterials) m.resolution.set(s.x, s.y)
+  }
+
+  _frameForMode() {
+    if (!this.world) return
+    if (this._sole) this._frameCamera(this._expand(this.sectorOf.get(this._sole), 0.12))
+    else this._frameCamera(this.world)
+  }
+
   _fedColor(name) {
     const f = this.timeline?.federates.find((f) => f.name === name)
     return f ? f.color : 0x333333
@@ -269,6 +369,7 @@ export class SceneController {
     this._resizeObserver.disconnect()
     this.controls.dispose()
     this._clearGroup(this.worldGroup)
+    this._clearGroup(this.sectorGroup)
     this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
     for (const l of this._labels) l.el.remove()
@@ -505,6 +606,7 @@ export class SceneController {
       this.camera.aspect = aspect
     }
     this.camera.updateProjectionMatrix()
+    this._applyResolution() // fat-line materials need the pixel size to render at a stable width
   }
 
   _clearGroup(group) {
@@ -525,6 +627,42 @@ export class SceneController {
       o.material?.dispose?.()
     })
   }
+}
+
+function boxCenter(bounds) {
+  return [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ]
+}
+
+// A fat (pixel-width) owner-colored wire box. Uses LineSegments2 because WebGL ignores
+// linewidth on ordinary lines; the caller must keep mat.resolution set to the pixel size.
+// Returns { seg, mat } so the material can be tracked for resolution updates.
+function fatBox(bounds, color, linewidth, opacity) {
+  const size = [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]]
+  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...size))
+  const geo = new LineSegmentsGeometry().fromEdgesGeometry(edges)
+  edges.dispose()
+  const mat = new LineMaterial({ color, linewidth, transparent: true, opacity, depthWrite: false })
+  const seg = new LineSegments2(geo, mat)
+  const c = boxCenter(bounds)
+  seg.position.set(c[0], c[1], c[2])
+  return { seg, mat }
+}
+
+// A faint owner-tinted volume (interior faces) for a revealed slab -- the "hue on the faces".
+function faceTint(bounds, color, opacity) {
+  const size = [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]]
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(...size),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.BackSide, depthWrite: false }),
+  )
+  const c = boxCenter(bounds)
+  mesh.position.set(c[0], c[1], c[2])
+  mesh.renderOrder = -5
+  return mesh
 }
 
 function dashedBox(bounds, color, dash, opacity) {

@@ -14,6 +14,7 @@ const props = defineProps({
   federateStates: { type: Object, default: () => ({}) },
   showGizmo: { type: Boolean, default: true },
   showUnits: { type: Boolean, default: true },
+  showSectors: { type: Boolean, default: false },
   projection: { type: String, default: 'perspective' },
   recenterWorldNonce: { type: Number, default: 0 },
   recenterFed: { type: Object, default: () => ({ name: null, n: 0 }) },
@@ -30,6 +31,7 @@ function applyAll() {
   scene.applyAircraftModes(props.aircraftModes)
   scene.setGizmoVisible(props.showGizmo)
   scene.setUnitsVisible(props.showUnits)
+  scene.setSectorsVisible(props.showSectors)
   scene.setProjection(props.projection)
 }
 
@@ -54,6 +56,7 @@ watch(() => props.aircraftModes, (m) => scene?.applyAircraftModes(m), { deep: tr
 watch(() => props.federateStates, (s) => scene?.applyFederateStates(s), { deep: true })
 watch(() => props.showGizmo, (v) => scene?.setGizmoVisible(v))
 watch(() => props.showUnits, (v) => scene?.setUnitsVisible(v))
+watch(() => props.showSectors, (v) => scene?.setSectorsVisible(v))
 watch(() => props.projection, (v) => scene?.setProjection(v))
 
 watch(() => props.recenterWorldNonce, () => scene?.recenterWorld())

@@ -6,6 +6,7 @@
 
 # ── Run output (figures/CSV regenerate from committed scripts) ──
 /runs/
+/sim_out/
 
 # ── Editor / OS cruft ──
 .vscode/

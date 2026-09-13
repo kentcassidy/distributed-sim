@@ -7,7 +7,12 @@ import * as THREE from 'three'
 //
 // Z-up, world units. Gridlines use ONE global step in every dimension -> square cells.
 
-export function buildWorldspace(bounds, palette) {
+// opts.axes    -- draw the RGB origin axes inside this box (default true). A sector room in
+//                 a partition view passes false; the axes live on the world wireframe instead.
+// opts.wallColor -- override the shaded-wall color (default palette.walls). A partition's own
+//                 slab passes a color tinted toward the owning federate's hue.
+export function buildWorldspace(bounds, palette, opts = {}) {
+  const { axes = true, wallColor = palette.walls } = opts
   const group = new THREE.Group()
   const size = [
     bounds.max[0] - bounds.min[0],
@@ -27,7 +32,7 @@ export function buildWorldspace(bounds, palette) {
   // aircraft -- wings near a wall draw over it instead of clipping into it.
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(size[0], size[1], size[2]),
-    new THREE.MeshBasicMaterial({ color: palette.walls, side: THREE.BackSide, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: wallColor, side: THREE.BackSide, depthWrite: false }),
   )
   room.position.copy(center)
   room.renderOrder = -10
@@ -54,11 +59,13 @@ export function buildWorldspace(bounds, palette) {
   }
 
   // axes: thin rods through the origin, small arrowheads, inset off the walls
-  const r = maxExt * 0.0009
-  const inset = 0.96
-  addAxis(group, bounds, 0, palette.axisX, r, inset)
-  addAxis(group, bounds, 1, palette.axisY, r, inset)
-  addAxis(group, bounds, 2, palette.axisZ, r, inset)
+  if (axes) {
+    const r = maxExt * 0.0009
+    const inset = 0.96
+    addAxis(group, bounds, 0, palette.axisX, r, inset)
+    addAxis(group, bounds, 1, palette.axisY, r, inset)
+    addAxis(group, bounds, 2, palette.axisZ, r, inset)
+  }
 
   const toCam = new THREE.Vector3()
   function updateWalls(camera) {
@@ -73,6 +80,35 @@ export function buildWorldspace(bounds, palette) {
   }
 
   return { group, updateWalls }
+}
+
+// The world reduced to a plain outline: its 12 limit edges (no wall fill, no grid) plus the
+// RGB origin axes. Used in a PARTITION view, where the lit gridded room is the active slab
+// and the whole world recedes to this quiet wireframe for spatial context.
+export function buildWorldWireframe(bounds, palette, opts = {}) {
+  const { axes = true } = opts
+  const group = new THREE.Group()
+  const size = [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]]
+  const center = new THREE.Vector3(
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  )
+  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...size))
+  const line = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({ color: palette.gridMajor, transparent: true, opacity: 0.85, depthWrite: false }),
+  )
+  line.position.copy(center)
+  group.add(line)
+
+  if (axes) {
+    const r = Math.max(...size) * 0.0009
+    addAxis(group, bounds, 0, palette.axisX, r, 0.96)
+    addAxis(group, bounds, 1, palette.axisY, r, 0.96)
+    addAxis(group, bounds, 2, palette.axisZ, r, 0.96)
+  }
+  return { group }
 }
 
 // --- grids -------------------------------------------------------------------
