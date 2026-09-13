@@ -15,6 +15,10 @@ const props = defineProps({
   showGizmo: { type: Boolean, default: true },
   showUnits: { type: Boolean, default: true },
   showSectors: { type: Boolean, default: false },
+  showWorldFrame: { type: Boolean, default: true },
+  showTint: { type: Boolean, default: true },
+  sizeMultiplier: { type: Number, default: 1 },
+  trackId: { type: Number, default: null },
   projection: { type: String, default: 'perspective' },
   recenterWorldNonce: { type: Number, default: 0 },
   recenterFed: { type: Object, default: () => ({ name: null, n: 0 }) },
@@ -31,8 +35,12 @@ function applyAll() {
   scene.applyAircraftModes(props.aircraftModes)
   scene.setGizmoVisible(props.showGizmo)
   scene.setUnitsVisible(props.showUnits)
+  scene.setWorldFrameVisible(props.showWorldFrame)
+  scene.setTintVisible(props.showTint)
+  scene.setSizeMultiplier(props.sizeMultiplier)
   scene.setSectorsVisible(props.showSectors)
   scene.setProjection(props.projection)
+  scene.setTrack(props.trackId)
 }
 
 onMounted(() => {
@@ -57,6 +65,10 @@ watch(() => props.federateStates, (s) => scene?.applyFederateStates(s), { deep: 
 watch(() => props.showGizmo, (v) => scene?.setGizmoVisible(v))
 watch(() => props.showUnits, (v) => scene?.setUnitsVisible(v))
 watch(() => props.showSectors, (v) => scene?.setSectorsVisible(v))
+watch(() => props.showWorldFrame, (v) => scene?.setWorldFrameVisible(v))
+watch(() => props.showTint, (v) => scene?.setTintVisible(v))
+watch(() => props.sizeMultiplier, (v) => scene?.setSizeMultiplier(v))
+watch(() => props.trackId, (v) => scene?.setTrack(v))
 watch(() => props.projection, (v) => scene?.setProjection(v))
 
 watch(() => props.recenterWorldNonce, () => scene?.recenterWorld())

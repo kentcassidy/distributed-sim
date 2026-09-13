@@ -22,7 +22,16 @@ const theme = ref('light')
 const showGizmo = ref(true)
 const showUnits = ref(true)
 const showSectors = ref(false)
+const showWorldFrame = ref(true)
+const showTint = ref(true)
 const isometric = ref(false)
+
+// global marker-size multiplier: slider position in [-1,1] maps exponentially so the center is 1x
+const sizeExp = ref(0)
+const sizeMul = computed(() => Math.pow(8, sizeExp.value)) // 0.125x .. 8x, centered at 1x
+
+// per-aircraft camera tracking (null = free camera)
+const trackedId = ref(null)
 const showVectorField = ref(false)
 const projection = computed(() => (isometric.value ? 'isometric' : 'perspective'))
 
@@ -140,6 +149,7 @@ async function openRun(run) {
     for (const k of Object.keys(selected)) delete selected[k]
     for (const k of Object.keys(acUi)) delete acUi[k]
     filterFed.value = 'all'
+    trackedId.value = null
     for (const f of tl.federates) {
       fedUi[f.name] = { visible: true, highlight: false, halo: false, size: DEFAULT_AIRCRAFT_SIZE }
       selected[f.name] = true
@@ -225,6 +235,9 @@ function toggleExpand(id) {
 function setMode(id, mode) {
   acUi[id].mode = mode
 }
+function toggleTrack(id) {
+  trackedId.value = trackedId.value === id ? null : id
+}
 
 // live stats
 const liveById = computed(() => {
@@ -266,8 +279,14 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
           <label class="opt"><input type="checkbox" :checked="showGizmo" @change="showGizmo = $event.target.checked" /> Axis gizmo</label>
           <label class="opt"><input type="checkbox" :checked="showUnits" @change="showUnits = $event.target.checked" /> Units</label>
           <label class="opt"><input type="checkbox" :checked="showSectors" @change="showSectors = $event.target.checked" /> Sectors</label>
+          <label class="opt"><input type="checkbox" :checked="showTint" @change="showTint = $event.target.checked" /> Tint</label>
+          <label class="opt"><input type="checkbox" :checked="showWorldFrame" @change="showWorldFrame = $event.target.checked" /> World frame</label>
           <label class="opt"><input type="checkbox" :checked="isometric" @change="isometric = $event.target.checked" /> Isometric</label>
           <label class="opt"><input type="checkbox" v-model="showVectorField" /> Vector field</label>
+          <div class="gsize">
+            <span class="lbl">global size ×{{ sizeMul.toFixed(2) }}</span>
+            <input type="range" min="-1" max="1" step="0.01" :value="sizeExp" @input="sizeExp = Number($event.target.value)" @dblclick="sizeExp = 0" title="double-click to reset to 1×" />
+          </div>
           <button class="wbtn" @click="recenterWorld">⊕ Recenter world</button>
         </section>
 
@@ -322,6 +341,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
               <span class="dot" :style="{ background: a.css }"></span>
               <span>id {{ a.id }}</span>
               <span class="sub">· {{ a.federate }}</span>
+              <span v-if="trackedId === a.id" class="tracking" title="camera tracking">◉</span>
               <span class="mode" :data-mode="acUi[a.id].mode">{{ acUi[a.id].mode }}</span>
             </div>
             <div v-if="acUi[a.id].expanded" class="ac-body">
@@ -330,6 +350,7 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
                 <button :class="{ on: acUi[a.id].mode === 'hide' }" @click="setMode(a.id, 'hide')">Hide</button>
                 <button :class="{ on: acUi[a.id].mode === 'highlight' }" @click="setMode(a.id, 'highlight')">Highlight</button>
               </div>
+              <button class="trackbtn" :class="{ on: trackedId === a.id }" @click="toggleTrack(a.id)">{{ trackedId === a.id ? '◉ Tracking — click to stop' : '◎ Track camera' }}</button>
               <dl class="stats">
                 <div><dt>role</dt><dd>{{ a.role }} · {{ a.federate }}</dd></div>
                 <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
@@ -351,7 +372,9 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
           :style="{ gridColumn: cell.span > 1 ? 'span ' + cell.span : null, borderColor: hovered && hovered === cell.federate ? cell.css : 'var(--border)' }"
           @mouseenter="hovered = cell.federate" @mouseleave="hovered = null">
           <Viewport :timeline="timeline" :theme="theme" :filter="cell.filter" :aircraft-modes="acModes" :federate-states="fedUi"
-            :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
+            :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :show-world-frame="showWorldFrame" :show-tint="showTint"
+            :size-multiplier="sizeMul" :track-id="trackedId"
+            :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
           <div class="pane-title"><span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}</div>
         </div>
       </div>
@@ -403,6 +426,14 @@ const speedOf = (v) => (v ? Math.hypot(v[0], v[1], v[2]) : 0)
 .opt { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 0; cursor: pointer; }
 .wbtn { margin-top: 8px; width: 100%; border: 1px solid var(--line); background: var(--card-bg); color: var(--text); border-radius: 6px; padding: 6px 0; font-size: 12px; cursor: pointer; }
 .wbtn:hover { background: var(--hover); }
+.gsize { margin-top: 8px; }
+.gsize .lbl { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.gsize input[type='range'] { width: 100%; accent-color: #6b6a63; }
+.trackbtn { margin-top: 8px; width: 100%; border: 1px solid var(--line); background: var(--card-bg); color: var(--text); border-radius: 6px; padding: 5px 0; font-size: 11.5px; cursor: pointer; }
+.trackbtn:hover { background: var(--hover); }
+.trackbtn.on { background: var(--chip-on); border-color: var(--chip-on-border); }
+.ac-head .tracking { margin-left: auto; color: #4f9a4f; font-size: 11px; }
+.ac-head .tracking + .mode { margin-left: 8px; }
 
 .seg { display: flex; gap: 4px; margin-bottom: 6px; }
 .seg button { flex: 1; border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; padding: 4px 0; font-size: 11.5px; cursor: pointer; color: var(--muted); }

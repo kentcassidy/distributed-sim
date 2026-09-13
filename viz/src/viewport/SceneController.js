@@ -17,7 +17,7 @@ import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix } from '../config.js'
 // Z-up world, X-red/Y-green/Z-blue.
 
 const HIGHLIGHT_SCALE = 1.7
-const PARTITION_TINT = 0.22 // how far a partition's shaded walls shift toward its owner hue
+const PARTITION_TINT = 0.15 // how far a partition's shaded walls shift toward its owner hue
 const HIGHLIGHT_LW = 2 // px line width for the (fat) highlight edges -- ~1px over the default
 
 export class SceneController {
@@ -42,12 +42,19 @@ export class SceneController {
     this.fedOf = new Map()
     this._fedBoxes = new Map()
     this.showUnits = true
+    this.sizeMultiplier = 1 // global master multiplier over every federate's marker size
+    this.trackId = null // aircraft id the camera is following (null = free)
 
     // partition geometry (from the controller meta)
     this.sectors = [] // [{id, owner, min, max}]
     this.sectorOf = new Map() // owner name -> {min,max}
     this.showSectors = false // the global "reveal every slab" toggle (off = clean default)
+    this.showWorldFrame = true // partition view: draw the quiet whole-world wireframe
+    this.showTint = true // owner-hue tinting of slab walls + reveal faces
     this._sole = null // the sole federate this pane shows (partition view), else null
+    this._worldEdges = null // the world wireframe's edge frame group (toggled by showWorldFrame)
+    this._wireframeUpdate = null // per-frame near/far edge update for the world wireframe
+    this._labelBounds = null // bounds the tick units attach to (slab in a partition view, else world)
     this._fatMaterials = [] // LineMaterials needing a pixel-resolution uniform on resize
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -92,6 +99,12 @@ export class SceneController {
     this._resizeObserver = new ResizeObserver(this._onResize)
     this._resizeObserver.observe(canvas.parentElement)
     this._onResize()
+
+    // Click the corner gizmo to snap the view down that axis. Capture phase + stopPropagation so
+    // a gizmo hit doesn't also start an OrbitControls drag.
+    this._ray = new THREE.Raycaster()
+    this._onPointerDown = this._onPointerDown.bind(this)
+    this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown, true)
 
     this._loop = this._loop.bind(this)
     this._raf = requestAnimationFrame(this._loop)
@@ -226,10 +239,37 @@ export class SceneController {
     for (const l of this._labels) l.obj.visible = on
   }
 
+  setSizeMultiplier(m) {
+    this.sizeMultiplier = m || 1
+    this._refreshFleet()
+  }
+
+  // Follow one aircraft: null frees the camera; a new id zooms in on it once, then _loop keeps
+  // the camera translating with it. Ignored in a pane that doesn't show that aircraft.
+  setTrack(id) {
+    const next = id == null ? null : Number(id)
+    const changed = next !== this.trackId
+    this.trackId = next
+    if (next != null && changed && this._canTrack(next)) this._zoomToAircraft(next)
+  }
+
   setSectorsVisible(on) {
     // The global reveal: light every slab's edges + tint its faces (the fused-view equivalent
     // of turning on highlight for all federates). Rebuild, but don't move the camera.
     this.showSectors = on
+    this._buildWorldGeometry()
+    this._refreshBoxes()
+  }
+
+  setWorldFrameVisible(on) {
+    // Cheap toggle of the partition view's whole-world wireframe (axes stay).
+    this.showWorldFrame = on
+    if (this._worldEdges) this._worldEdges.visible = on
+  }
+
+  setTintVisible(on) {
+    // Owner-hue tinting is baked into wall/face materials, so rebuild to apply.
+    this.showTint = on
     this._buildWorldGeometry()
     this._refreshBoxes()
   }
@@ -242,6 +282,44 @@ export class SceneController {
     const b = this._federateBounds(name)
     if (b) this._frameCamera(this._expand(b, 0.12), false)
     else this.recenterWorld()
+  }
+
+  _canTrack(id) {
+    const mesh = this.meshes.get(id)
+    if (!mesh) return false
+    const fed = this.fedOf.get(id)
+    return this._inFilter(fed) && this.fedVisible.get(fed) !== false
+  }
+
+  _zoomToAircraft(id) {
+    const mesh = this.meshes.get(id)
+    if (!mesh) return
+    const p = mesh.position
+    const markerLen = (this.fedSize.get(this.fedOf.get(id)) || DEFAULT_AIRCRAFT_SIZE) * this.sizeMultiplier
+    const dist = Math.max(markerLen * 8, 30)
+    const dir = this.camera.position.clone().sub(this.controls.target)
+    if (dir.lengthSq() < 1e-9) dir.set(1, -1, 0.7)
+    dir.normalize()
+    this.controls.target.copy(p)
+    this.camera.position.copy(p).addScaledVector(dir, dist)
+    if (!this.camera.isOrthographicCamera) {
+      this.camera.near = Math.max(dist * 0.001, 0.01)
+      this.camera.far = Math.max(dist * 20, this._worldDiag() * 2)
+    }
+    this.camera.updateProjectionMatrix()
+    this.controls.update()
+  }
+
+  // Translate the camera + target by the tracked aircraft's per-frame motion (follow without
+  // changing the relative view). Runs before controls.update() in the loop.
+  _followTrack() {
+    if (this.trackId == null || !this._canTrack(this.trackId)) return
+    const p = this.meshes.get(this.trackId).position
+    const t = this.controls.target
+    this.camera.position.x += p.x - t.x
+    this.camera.position.y += p.y - t.y
+    this.camera.position.z += p.z - t.z
+    t.set(p.x, p.y, p.z)
   }
 
   // --- internals ---------------------------------------------------------------
@@ -258,7 +336,7 @@ export class SceneController {
       const highlight = mode === 'highlight'
       mesh.visible = fedOn && mode !== 'hide' && this._inFilter(fed)
       const size = this.fedSize.get(fed) || DEFAULT_AIRCRAFT_SIZE
-      mesh.scale.setScalar((size / 2) * (highlight ? HIGHLIGHT_SCALE : 1))
+      mesh.scale.setScalar((size / 2) * this.sizeMultiplier * (highlight ? HIGHLIGHT_SCALE : 1))
       mesh.material.emissive.setHex(highlight ? mesh.material.color.getHex() : 0x000000)
       mesh.material.emissiveIntensity = highlight ? 0.55 : 0
     }
@@ -292,20 +370,30 @@ export class SceneController {
 
     const sole = this._soleFederate()
     this._sole = sole
+    this._worldEdges = null
+    this._wireframeUpdate = null
 
     if (sole) {
-      // partition view: quiet world wireframe (edges + axes) + this slab as the lit, tinted room
+      // partition view: quiet world wireframe (edges + axes) + this slab as the lit, tinted room.
+      // Axes stay in the wireframe group; only its edge frame is toggled by showWorldFrame.
       const wf = buildWorldWireframe(this.world, this.palette, { axes: true })
+      wf.frameGroup.visible = this.showWorldFrame
+      this._worldEdges = wf.frameGroup
+      this._wireframeUpdate = wf.update
       this.worldGroup.add(wf.group)
       const slab = this.sectorOf.get(sole)
-      const wallColor = mix(this.palette.walls, this._fedColor(sole), PARTITION_TINT)
-      this.worldspace = buildWorldspace(slab, this.palette, { axes: false, wallColor })
+      const owner = this._fedColor(sole)
+      const wallColor = this.showTint ? mix(this.palette.walls, owner, PARTITION_TINT) : this.palette.walls
+      // the slab's outer edges in the OWNER color, so they separate from the grey world wireframe
+      this.worldspace = buildWorldspace(slab, this.palette, { axes: false, wallColor, edgeColor: owner })
       this.worldGroup.add(this.worldspace.group)
+      this._labelBounds = slab
       if (this.showSectors) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s)
     } else {
       // standard/fused view: the whole world as the gridded, shaded room
       this.worldspace = buildWorldspace(this.world, this.palette, { axes: true })
       this.worldGroup.add(this.worldspace.group)
+      this._labelBounds = this.world
       if (this.showSectors) for (const s of this.sectors) this._addSectorReveal(s)
     }
 
@@ -321,7 +409,7 @@ export class SceneController {
     const { seg, mat } = fatBox(sec, color, HIGHLIGHT_LW, 0.8)
     this.sectorGroup.add(seg)
     this._fatMaterials.push(mat)
-    this.sectorGroup.add(faceTint(sec, color, 0.1))
+    if (this.showTint) this.sectorGroup.add(faceTint(sec, color, 0.1))
   }
 
   // Per-federate highlight (fat solid edges) + halo (fine dashes), one per federate, hidden
@@ -367,6 +455,7 @@ export class SceneController {
   dispose() {
     if (this._raf) cancelAnimationFrame(this._raf)
     this._resizeObserver.disconnect()
+    this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown, true)
     this.controls.dispose()
     this._clearGroup(this.worldGroup)
     this._clearGroup(this.sectorGroup)
@@ -384,10 +473,11 @@ export class SceneController {
     for (const l of this._labels) l.el.remove()
     this._labels.length = 0
     this._clearGroup(this.labelGroup)
-    if (!this.world) return
+    const b = this._labelBounds || this.world
+    if (!b) return
     for (let axis = 0; axis < 3; axis++) {
-      const step = niceStep(this.world.max[axis] - this.world.min[axis])
-      for (const v of ticksFor(this.world.min[axis], this.world.max[axis], step)) {
+      const step = niceStep(b.max[axis] - b.min[axis])
+      for (const v of ticksFor(b.min[axis], b.max[axis], step)) {
         if (Math.abs(v) < step * 1e-6) continue
         const div = document.createElement('div')
         div.textContent = formatTick(v)
@@ -405,14 +495,19 @@ export class SceneController {
   }
 
   _updateLabels(camera) {
-    if (!this.world || this._labels.length === 0) return
-    const b = this.world
+    const b = this._labelBounds || this.world
+    if (!b || this._labels.length === 0) return
     const c = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
     const cam = camera.position
-    const off = this._worldMaxExtent() * 0.015
+    const ext = Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
+    const off = ext * 0.004 // sit close to the edge (small, since flush bounds have no margin)
     const val = (ax, side) => (side ? b.max[ax] : b.min[ax])
+    // Isometric (orthographic) visibility uses the parallel view direction, not the camera point.
+    const iso = camera.isOrthographicCamera
+    const dir = iso ? camera.getWorldDirection(new THREE.Vector3()) : null
     const wallVisible = (ax, side) => {
       const n = side ? 1 : -1
+      if (iso) return n * dir.getComponent(ax) > 0 // interior visible = outward normal along view dir
       return n * (cam.getComponent(ax) - val(ax, side)) < 0
     }
     const pickEdge = (A) => {
@@ -560,8 +655,10 @@ export class SceneController {
 
   _loop() {
     if (this.timeline) this._applyTime(playback.t)
+    this._followTrack()
     this.controls.update()
     if (this.worldspace) this.worldspace.updateWalls(this.camera)
+    if (this._wireframeUpdate) this._wireframeUpdate(this.camera)
     if (this.showUnits) this._updateLabels(this.camera)
     this.renderer.render(this.scene, this.camera)
     this.labelRenderer.render(this.scene, this.camera)
@@ -569,22 +666,59 @@ export class SceneController {
     this._raf = requestAnimationFrame(this._loop)
   }
 
-  _renderGizmo() {
-    if (!this.gizmoVisible || !this.gizmo) return
+  // Gizmo viewport rectangle in the renderer's pixel space (bottom-left origin), plus the full
+  // canvas size. Shared by the gizmo render and the click hit-test so they stay in lockstep.
+  _gizmoRegion() {
     const size = this.renderer.getSize(this._tmpSize)
     const gs = Math.max(56, Math.min(110, size.x * 0.16))
     const m = 8
-    const x = size.x - gs - m
-    const y = size.y - gs - m
+    return { x: size.x - gs - m, y: size.y - gs - m, gs, w: size.x, h: size.y }
+  }
+
+  _onPointerDown(e) {
+    if (!this.gizmoVisible || !this.gizmo) return
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    const r = this._gizmoRegion()
+    const px = e.clientX - rect.left
+    const pyBottom = r.h - (e.clientY - rect.top) // WebGL viewport is bottom-left origin
+    if (px < r.x || px > r.x + r.gs || pyBottom < r.y || pyBottom > r.y + r.gs) return
+    const u = ((px - r.x) / r.gs) * 2 - 1
+    const v = ((pyBottom - r.y) / r.gs) * 2 - 1
+    this._ray.setFromCamera({ x: u, y: v }, this.gizmo.camera)
+    const hit = this._ray.intersectObjects(this.gizmo.hits, false)[0]
+    if (hit) {
+      e.preventDefault()
+      e.stopPropagation() // don't let this pointerdown also start an orbit drag
+      this._snapToAxis(hit.object.userData.axis)
+    }
+  }
+
+  // Snap the camera to look down the +axis, keeping the current target and distance. The other
+  // two axes come out orthogonal on screen (Blender-style). Z uses +Y up (top-down).
+  _snapToAxis(axis) {
+    const target = this.controls.target
+    const dist = this.camera.position.distanceTo(target) || this._worldDiag() || 1
+    this.camera.up.set(0, 0, 1)
+    if (axis === 2) this.camera.up.set(0, 1, 0)
+    const dir = new THREE.Vector3()
+    dir.setComponent(axis, 1)
+    this.camera.position.copy(target).addScaledVector(dir, dist)
+    this.camera.updateProjectionMatrix()
+    this.controls.update()
+  }
+
+  _renderGizmo() {
+    if (!this.gizmoVisible || !this.gizmo) return
+    const r = this._gizmoRegion()
     this.gizmo.update(this.camera)
     this.renderer.autoClear = false
     this.renderer.setScissorTest(true)
-    this.renderer.setViewport(x, y, gs, gs)
-    this.renderer.setScissor(x, y, gs, gs)
+    this.renderer.setViewport(r.x, r.y, r.gs, r.gs)
+    this.renderer.setScissor(r.x, r.y, r.gs, r.gs)
     this.renderer.clearDepth()
     this.renderer.render(this.gizmo.scene, this.gizmo.camera)
     this.renderer.setScissorTest(false)
-    this.renderer.setViewport(0, 0, size.x, size.y)
+    this.renderer.setViewport(0, 0, r.w, r.h)
     this.renderer.autoClear = true
   }
 

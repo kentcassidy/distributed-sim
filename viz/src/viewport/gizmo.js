@@ -10,9 +10,11 @@ export function buildGizmo(palette) {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
   camera.up.set(0, 0, 1)
 
-  addArm(scene, new THREE.Vector3(1, 0, 0), palette.axisX, 'X')
-  addArm(scene, new THREE.Vector3(0, 1, 0), palette.axisY, 'Y')
-  addArm(scene, new THREE.Vector3(0, 0, 1), palette.axisZ, 'Z')
+  // `hits` are the pickable targets (one per +axis) for the click-to-snap interaction.
+  const hits = []
+  addArm(scene, hits, 0, new THREE.Vector3(1, 0, 0), palette.axisX, 'X')
+  addArm(scene, hits, 1, new THREE.Vector3(0, 1, 0), palette.axisY, 'Y')
+  addArm(scene, hits, 2, new THREE.Vector3(0, 0, 1), palette.axisZ, 'Z')
 
   const dist = 3.4
   const fwd = new THREE.Vector3()
@@ -24,10 +26,10 @@ export function buildGizmo(palette) {
     camera.updateMatrixWorld()
   }
 
-  return { scene, camera, update }
+  return { scene, camera, update, hits }
 }
 
-function addArm(scene, dir, color, letter) {
+function addArm(scene, hits, axis, dir, color, letter) {
   // colored arm from origin to the + tip
   const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), dir.clone()])
   scene.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color, linewidth: 2 })))
@@ -39,6 +41,16 @@ function addArm(scene, dir, color, letter) {
   )
   knob.position.copy(dir)
   scene.add(knob)
+
+  // a larger invisible sphere for reliable clicking (the visible knob is small on screen)
+  const hit = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34, 12, 8),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  )
+  hit.position.copy(dir)
+  hit.userData.axis = axis
+  scene.add(hit)
+  hits.push(hit)
 
   // letter on the knob
   const label = makeLabel(letter, hexToCss(color))

@@ -12,7 +12,7 @@ import * as THREE from 'three'
 // opts.wallColor -- override the shaded-wall color (default palette.walls). A partition's own
 //                 slab passes a color tinted toward the owning federate's hue.
 export function buildWorldspace(bounds, palette, opts = {}) {
-  const { axes = true, wallColor = palette.walls } = opts
+  const { axes = true, wallColor = palette.walls, edgeColor = palette.gridMajor, edgeOpacity = 0.9 } = opts
   const group = new THREE.Group()
   const size = [
     bounds.max[0] - bounds.min[0],
@@ -38,6 +38,11 @@ export function buildWorldspace(bounds, palette, opts = {}) {
   room.renderOrder = -10
   group.add(room)
 
+  // persistent outline: 12 limit edges ALWAYS drawn (never culled) so the box reads as a box
+  // from any angle -- even where a face grid is hidden. Near edges render dashed + faint.
+  const frame = buildEdgeFrame(bounds, { solidColor: edgeColor, solidOpacity: edgeOpacity, dashColor: edgeColor })
+  group.add(frame.group)
+
   // six wall grids, one per face; the near ("fourth") wall is hidden in updateWalls()
   const walls = []
   const planes = [
@@ -49,11 +54,7 @@ export function buildWorldspace(bounds, palette, opts = {}) {
     for (const side of [0, 1]) {
       const faceVal = side === 0 ? bounds.min[aN] : bounds.max[aN]
       const obj = buildFaceGrid(bounds, aU, aV, aN, faceVal, palette, major, minor)
-      const normal = new THREE.Vector3()
-      normal.setComponent(aN, side === 0 ? -1 : 1) // outward
-      const faceCenter = center.clone()
-      faceCenter.setComponent(aN, faceVal)
-      walls.push({ obj, normal, faceCenter })
+      walls.push({ obj, aN, side })
       group.add(obj)
     }
   }
@@ -67,19 +68,79 @@ export function buildWorldspace(bounds, palette, opts = {}) {
     addAxis(group, bounds, 2, palette.axisZ, r, inset)
   }
 
-  const toCam = new THREE.Vector3()
   function updateWalls(camera) {
-    // Show a wall only where we're seeing its INTERIOR face -- identical to the BackSide
-    // room. A wall whose OUTWARD normal points toward the camera (we'd see its outside)
-    // is hidden. From any angle that leaves exactly the interior-facing walls, matching
-    // the room color.
-    for (const w of walls) {
-      toCam.copy(camera.position).sub(w.faceCenter)
-      w.obj.visible = w.normal.dot(toCam) < 0
-    }
+    // Show a wall only where we're seeing its INTERIOR face; the near faces (whose interior we
+    // can't see) are hidden. faceNear() is projection-aware, so isometric uses the view
+    // direction rather than the camera point. The edge frame follows the same near/far test.
+    for (const w of walls) w.obj.visible = !faceNear(w.aN, w.side, bounds, camera)
+    frame.update(camera)
   }
 
   return { group, updateWalls }
+}
+
+// A box frame whose 12 edges are always drawn. The edges nearest the camera (those shared by
+// two near/hidden faces) render at a lower opacity so they don't clutter what sits behind them;
+// the rest are full-strength. Both solid. Projection-aware (perspective + isometric).
+export function buildEdgeFrame(bounds, opts = {}) {
+  const { solidColor = 0x000000, solidOpacity = 0.9, nearOpacity = 0.25 } = opts
+  const group = new THREE.Group()
+  const val = (ax, side) => (side ? bounds.max[ax] : bounds.min[ax])
+  const edges = []
+  for (let A = 0; A < 3; A++) {
+    const B = (A + 1) % 3
+    const C = (A + 2) % 3
+    for (const sB of [0, 1]) {
+      for (const sC of [0, 1]) {
+        const p0 = [0, 0, 0]
+        const p1 = [0, 0, 0]
+        p0[A] = bounds.min[A]
+        p1[A] = bounds.max[A]
+        p0[B] = p1[B] = val(B, sB)
+        p0[C] = p1[C] = val(C, sC)
+        const pos = new Float32Array([...p0, ...p1])
+        const far = new THREE.LineSegments(
+          edgeGeo(pos),
+          new THREE.LineBasicMaterial({ color: solidColor, transparent: true, opacity: solidOpacity, depthWrite: false }),
+        )
+        const near = new THREE.LineSegments(
+          edgeGeo(pos),
+          new THREE.LineBasicMaterial({ color: solidColor, transparent: true, opacity: nearOpacity, depthWrite: false }),
+        )
+        near.visible = false
+        group.add(far, near)
+        edges.push({ B, C, sB, sC, far, near })
+      }
+    }
+  }
+  const update = (camera) => {
+    for (const e of edges) {
+      const isNear = faceNear(e.B, e.sB, bounds, camera) && faceNear(e.C, e.sC, bounds, camera)
+      e.far.visible = !isNear
+      e.near.visible = isNear
+    }
+  }
+  return { group, update }
+}
+
+function edgeGeo(pos) {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  return g
+}
+
+// Is the face at (axis, side) a NEAR face -- one whose interior we cannot see (outward normal
+// points toward the viewer)? Perspective uses the camera point; orthographic uses the parallel
+// view direction, which is the fix for isometric wall/edge/units visibility.
+const _viewDir = new THREE.Vector3()
+function faceNear(ax, side, bounds, camera) {
+  const n = side ? 1 : -1 // outward normal sign along this axis
+  if (camera.isOrthographicCamera) {
+    camera.getWorldDirection(_viewDir) // points into the scene
+    return n * _viewDir.getComponent(ax) < 0 // outward normal opposes view dir => faces viewer
+  }
+  const faceVal = side ? bounds.max[ax] : bounds.min[ax]
+  return n * (camera.position.getComponent(ax) - faceVal) > 0 // outward normal toward camera
 }
 
 // The world reduced to a plain outline: its 12 limit edges (no wall fill, no grid) plus the
@@ -89,18 +150,8 @@ export function buildWorldWireframe(bounds, palette, opts = {}) {
   const { axes = true } = opts
   const group = new THREE.Group()
   const size = [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]]
-  const center = new THREE.Vector3(
-    (bounds.min[0] + bounds.max[0]) / 2,
-    (bounds.min[1] + bounds.max[1]) / 2,
-    (bounds.min[2] + bounds.max[2]) / 2,
-  )
-  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...size))
-  const line = new THREE.LineSegments(
-    edges,
-    new THREE.LineBasicMaterial({ color: palette.gridMajor, transparent: true, opacity: 0.85, depthWrite: false }),
-  )
-  line.position.copy(center)
-  group.add(line)
+  const frame = buildEdgeFrame(bounds, { solidColor: palette.gridMajor, solidOpacity: 0.85, dashColor: palette.gridMajor })
+  group.add(frame.group)
 
   if (axes) {
     const r = Math.max(...size) * 0.0009
@@ -108,7 +159,9 @@ export function buildWorldWireframe(bounds, palette, opts = {}) {
     addAxis(group, bounds, 1, palette.axisY, r, 0.96)
     addAxis(group, bounds, 2, palette.axisZ, r, 0.96)
   }
-  return { group }
+  // frameGroup is returned separately so callers can toggle the outer frame while keeping the
+  // axes; update(camera) drives its near/far edge dashing each frame.
+  return { group, frameGroup: frame.group, update: frame.update }
 }
 
 // --- grids -------------------------------------------------------------------

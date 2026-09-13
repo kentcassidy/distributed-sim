@@ -74,8 +74,11 @@ Suggested columns: **Done** (1–11), **Next** (12), **Backlog** (13–16).
 13. **[BACKLOG] Ghost rendering / Live viewpoints.** Render `role:"ghost"` distinctly
     (translucent, lagged) once the Live experiment produces dead-reckoned ghosts.
 
-14. **[BACKLOG] Sector rendering.** Draw `meta.sectors` as the real federate/sector
-    boxes (replacing the current worldspace-as-federate-box placeholder).
-
 15. **[BACKLOG] Vector-field (wind/storm) overlay.** Thin arrows at grid points,
     thickness = strength, behind the planes. Toggle exists; shows a placeholder now.
+
+> Done since this board was drawn: run-folder ingest + run dropdown; partition rendering
+> (controller `world`/`sectors`, flush world box, owner-tinted slabs, sector reveal);
+> near-edge fade + always-on outer edges; isometric visibility fix; gizmo axis-click
+> snap; global size multiplier; per-aircraft camera tracking. #12 (emitter meta+role)
+> landed on the core side; #14 (sector rendering) done; adjustable viewport seams dropped.

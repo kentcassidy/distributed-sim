@@ -1,0 +1,95 @@
+DEVLOG — 2026-09-13 (Claude-generated session log)
+====================================================
+
+Focus: frontend only (viz/). Brought the viewer in line with the now-partitioned
+sim_out, built the partition RENDERING (the visual thesis), then a cosmetic pass and
+three feature items. No C++ changed this session (the core side had already grown the
+controller emit + partitioned runs; see below). All viz/ work stays walled off from the
+CMake build; the federate still only EMITS NDJSON.
+
+CONTEXT AT START
+----------------
+Core side had moved: each sim_out/<run>/ is now one simulation trial, each run carries a
+controller.ndjson meta-only line with world bounds + owner-tagged sectors, and the
+federate files carry meta (sectors:[]) + frames with role. A src/diff/ truth-diff tool
+exists on the core side (the user has their own diff; NOT brought into the frontend by
+request). The viewer, still expecting flat sim_out/*.ndjson, was broken against the new
+layout. That break was the opening for this session's work.
+
+WHAT WAS BUILT (all under viz/)
+-------------------------------
+1) RUN-AWARE INGEST + RUN SELECTOR
+   - vite.config.js dev endpoint now serves runs: /sim_out/index.json -> {runs}, then
+     /sim_out/<run>/index.json -> {files}, then the raw files. Old flat files still load
+     as a run named "(root)".
+   - loader.js: listRuns() + loadRun(run). App.vue: a Run dropdown; switching resets the
+     per-run UI state + playhead.
+
+2) CONTROLLER INTERPRETATION (timeline.js)
+   - The controller source is identified unambiguously by a `world` field in its meta.
+     Its world bounds + owner-tagged sectors are captured; it contributes NO tracks and
+     does not appear as a federate.
+   - Fleet = federates that fly aircraft PLUS any sector owner, so a federate owning an
+     empty slab still shows (with a color + a slab). Names sorted for stable colors.
+   - Timeline now carries .world and .sectors.
+
+3) PARTITION RENDERING (SceneController.js + worldspace.js) — the thesis
+   - Pane mode keys off its filter: exactly one federate (that owns a slab) = PARTITION
+     view; all/multiple = standard/FUSED view.
+   - Fused: whole-world gridded, shaded room (flush to controller `world`).
+   - Partition: the whole world drops to a quiet edge wireframe (+axes); that federate's
+     own slab is the lit gridded room, walls tinted toward its owner hue.
+   - "Sectors" toggle = the global reveal (every slab's fat edges + a faint face tint).
+   - Per-federate "highlight bounds" = solid FAT edges (LineSegments2, ~1px thicker than
+     WebGL basic lines can do), filter-independent so you can light up OTHER partitions
+     from inside a pane. Halo = finer dashes, a touch more opaque.
+   - Camera: fused frames the whole world (user's stated default); partition frames its
+     slab. Aircraft stay small in X because the split is Y-only over a 20 km world -> the
+     per-aircraft tracking feature (below) is the real fix.
+
+4) COSMETIC PASS
+   - Always-on outer EDGES: buildEdgeFrame draws all 12 limit edges, never culled, so the
+     box reads as a box from any angle even where a face grid is hidden. Near edges (those
+     shared by two hidden faces) render solid but faint (opacity 0.25); far edges full.
+   - Slab outer edges use the OWNER color, so they separate from the grey world wireframe.
+   - ISOMETRIC FIX: wall culling, the near/far edge test, AND the units' nearest-edge pick
+     now use the orthographic view DIRECTION (getWorldDirection), not the camera point.
+     One helper, faceNear(), drives all three so perspective + isometric agree.
+   - Units: sit closer to the edge (offset 0.015 -> 0.004 of extent); in a partition pane
+     they attach to the SLAB bounds (per-partition units), world in fused.
+   - New toggles: "World frame" (hide the whole-world wireframe in a slab view, keeping
+     the axes) and "Tint" (owner-hue tinting globally). Partition tint reduced ~30%
+     (PARTITION_TINT 0.22 -> 0.15).
+
+5) FEATURES (backlog #1, #2, #4)
+   - #2 Global size multiplier: a slider (exp map, centered 1x, 0.125x..8x, dbl-click
+     reset) scaling every federate marker on top of their own sliders.
+   - #1 Gizmo axis-click: click a gizmo axis knob to snap the view down that axis (X/Y
+     keep Z up; Z is top-down with +Y up). Capture-phase hit-test with an invisible
+     larger target per knob; stopPropagation so it doesn't also start an orbit drag.
+   - #4 Per-aircraft camera tracking: "Track camera" per aircraft; zooms in and follows
+     it each frame (preserving relative orbit/zoom) while the default framing stays the
+     whole world. Only acts in panes showing that aircraft; clears on run switch.
+
+SEAM / SCHEMA
+-------------
+NDJSON_SCHEMA.md already documented the controller descriptor (world + sectors[].owner);
+the viewer consumes it exactly (controller detected by the `world` field). No emitter
+changes requested or made from the frontend side.
+
+BACKLOG (viz/Revision Backlog.txt + docs/other/viz-kanban.md updated)
+---------------------------------------------------------------------
+- DONE this session: run ingest + dropdown; partition rendering; near-edge fade +
+  always-on edges; isometric visibility; gizmo axis-snap; global size multiplier;
+  per-aircraft tracking. (World-box-flush + partition-folder ingest were the entry point.)
+- DROPPED (user): per-federate "skeleton" button; adjustable viewport seams.
+- REMAINING (wait on core/Live): vector-field overlay (toggle is still a stub); ghost
+  rendering / Live viewpoints (role:"ghost").
+
+HANDOFF
+-------
+Frontend is at a strong stopping point; the user is set on the frontend for now. The
+viewer renders the partitioned runs and makes the partition legible (the presentation
+goal). Next frontend work is gated on the Live experiment (ghosts, vector field). The
+constructive core (K=1 vs K=2 truth diff, then migration/handoff) continues on the C++
+side, independent of viz/.
