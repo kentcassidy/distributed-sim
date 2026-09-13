@@ -55,13 +55,33 @@
         (parameter Min)
         (parameter Max)
       )
-      ;; controller -> all: "begin," carrying the shared run config (fixed dt + the world
-      ;; volume). Disseminating the bounds gives every owner identical inputs and later
-      ;; feeds handoff-partner discovery / ghost rendering.
+      ;; federate -> federate: PEER-TO-PEER ownership transfer (migration). The owning
+      ;; federate detects that an aircraft has left its sector, computes the destination
+      ;; owner itself from the broadcast partition map, and sends this DIRECTLY to that
+      ;; federate carrying the aircraft's exact state and the logical Step the state is
+      ;; valid at. The controller neither publishes nor subscribes this -- so the FOM itself
+      ;; proves the controller is OUT of the runtime migration loop. Kept separate from
+      ;; AssignEntity on purpose: AssignEntity = ownership CREATED centrally at bootstrap,
+      ;; Handoff = ownership MOVED between peers at runtime.
+      (class Handoff reliable receive
+        (parameter TargetFederate)
+        (parameter EntityId)
+        (parameter Position)
+        (parameter Velocity)
+        (parameter Orientation)
+        (parameter AngularV)
+        (parameter Step)
+      )
+      ;; controller -> all: "begin," carrying the shared run config: fixed dt, the world
+      ;; volume, and the RUN LENGTH (NumSteps). Disseminating the bounds gives every owner
+      ;; identical inputs; disseminating NumSteps makes the controller -- not the federate --
+      ;; own how long the run is, so every federate stops at the SAME logical end (the
+      ;; prerequisite for a federate to carry a handed-off aircraft to that shared end).
       (class StartRun reliable receive
         (parameter Dt)
         (parameter WorldMin)
         (parameter WorldMax)
+        (parameter NumSteps)
       )
       ;; controller -> all: end the run. Federates HOLD (keep serving) after finishing their
       ;; steps until this arrives, then resign together -- so there can always be more work

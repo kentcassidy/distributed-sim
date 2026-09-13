@@ -1,0 +1,107 @@
+DEVLOG — 2026-09-13 (Claude-generated, FRONTEND / viz)
+======================================================
+
+Separate -viz file on purpose: the core agent also logs to 9-13-26.txt, and a shared
+dated file gets overwritten. This is the FRONTEND session log; the core (constructive
+invariance + migration) lives in 9-13-26.txt.
+
+Focus: frontend only (viz/). Brought the viewer in line with the now-partitioned sim_out,
+built the partition RENDERING (the visual thesis), a cosmetic pass, three feature items,
+and two QoL touches. No C++ changed. viz/ stays walled off from the CMake build; the
+federate only EMITS NDJSON; the viewer only READS.
+
+CONTEXT AT START
+----------------
+Core side had moved: each sim_out/<run>/ is one simulation trial; a controller.ndjson
+carries a meta-only line with world bounds + owner-tagged sectors; federate files carry
+meta (sectors:[]) + frames with role. The viewer, still expecting flat sim_out/*.ndjson,
+was broken against the new layout -- that break was the opening.
+
+WHAT WAS BUILT (all under viz/)
+-------------------------------
+1) RUN-AWARE INGEST + RUN SELECTOR
+   - vite.config.js dev endpoint serves runs: /sim_out/index.json -> {runs}, then
+     /sim_out/<run>/index.json -> {files}, then raw files. Old flat files load as "(root)".
+   - loader.js: listRuns() + loadRun(run). App.vue: a Run dropdown; switching resets the
+     per-run UI state + playhead.
+
+2) CONTROLLER INTERPRETATION (timeline.js)
+   - Controller source identified unambiguously by a `world` field in its meta; its world
+     bounds + owner-tagged sectors are captured; it contributes NO tracks and is not a
+     federate. Fleet = federates that fly aircraft PLUS any sector owner (an empty-slab
+     owner still shows). Names sorted for stable colors. Timeline gained .world + .sectors.
+
+3) PARTITION RENDERING (SceneController.js + worldspace.js) -- the thesis
+   - Pane mode from its filter: exactly one federate (owning a slab) = PARTITION view;
+     all/multiple = FUSED view.
+   - Fused: whole-world gridded, shaded room, flush to controller `world`.
+   - Partition: whole world drops to a quiet edge wireframe (+axes); that federate's own
+     slab is the lit gridded room, walls tinted toward its owner hue.
+   - "Sectors" toggle = global reveal (every slab's fat edges + faint face tint).
+   - Per-federate "highlight bounds" = solid FAT edges (LineSegments2, ~1px thicker than
+     WebGL basic lines allow), filter-independent (light up OTHER partitions from a pane).
+   - Camera: fused frames the whole world; partition frames its slab.
+
+4) COSMETIC PASS
+   - Always-on outer EDGES: buildEdgeFrame draws all 12 limit edges, never culled. Near
+     edges (shared by two hidden faces) render solid but faint (opacity 0.25); far edges
+     full. Slab edges use the OWNER color so they separate from the grey world wireframe.
+   - ISOMETRIC FIX: wall culling, the near/far edge test, AND the units' nearest-edge pick
+     now use the orthographic view DIRECTION (getWorldDirection), not the camera point.
+     One helper, faceNear(), drives all three so perspective + isometric agree.
+   - Units: closer to the edge (offset 0.015 -> 0.004 of extent); in a partition pane they
+     attach to the SLAB bounds (per-partition units), world in fused.
+   - Toggles: "World frame" (hide the whole-world wireframe in a slab view, keep the axes)
+     and "Tint" (owner-hue tinting globally). Partition tint reduced ~30% (0.22 -> 0.15).
+
+5) FEATURES (backlog #1, #2, #4)
+   - #2 Global size multiplier: slider (exp map, centered 1x, 0.125x..8x, dbl-click reset)
+     scaling every federate marker on top of their own sliders.
+   - #1 Gizmo axis-click: click a gizmo axis knob to snap the view down that axis (X/Y keep
+     Z up; Z is top-down with +Y up). Capture-phase hit-test with an invisible larger target
+     per knob; stopPropagation so it doesn't also start an orbit drag.
+   - #4 Per-aircraft camera tracking: "Track camera" per aircraft; zooms in and follows it
+     each frame (preserving relative orbit/zoom); default framing stays the whole world.
+     Only acts in panes showing that aircraft; clears on run switch.
+
+6) QoL
+   - Per-aircraft ORIENTATION in the stats: heading/pitch/roll (deg) from the reported
+     quaternion (config.js quatToEulerDeg; Z-up, nose +X). Longitudinal filler shows pitch
+     ~1 deg, heading/roll ~0.
+   - Units DECLUTTER: _updateLabels thins tick labels by on-screen spacing each frame
+     (project -> hide any within MIN_LABEL_PX=22 of the last kept), so zoomed-out views keep
+     only spaced indicators and fill back in on zoom-in.
+   - Halo margin bug spotted + made uniform (constant absolute gap on every face instead of
+     per-axis %, which had ballooned the long-edge ends) -- but see ON HOLD below.
+
+ON HOLD -- expectations pending core data (viewer must NOT synthesize)
+---------------------------------------------------------------------
+- HALO from meta: the halo region is SOURCE DATA the federates should define in meta, NOT
+  generated in the viewer. Current halo is a uniform-gap placeholder (internal note left in
+  SceneController._buildOverlays). Expected once near-seam collision lands; drive it from the
+  meta then.
+- HANDOFF ownership in the NDJSON: investigated the seam-crossing run (root A/B, seam y=750).
+  Aircraft cross the seam geometrically (id1 y 400->994, id2 y 1100->500 at ~t6), but the
+  data does NOT reflect reassignment: each aircraft is emitted by its ORIGINAL federate for
+  all 101 frames (A keeps logging id 1 after it enters B's sector), no owner field, role stays
+  "owned". So there is no explicit OR implicit ownership-change signal, and the viewer must
+  not infer it from geometry (that would be faking). The core devlog confirms this is
+  migration M2 "report only, no transfer yet"; M4/M5 plan an explicit per-frame "owner" field
+  -- exactly what's needed. When it lands, timeline.js needs owner-per-frame (it currently
+  fixes an aircraft's federate at first sighting + merges by id) so color/attribution can
+  follow the handoff over time.
+
+BACKLOG STATUS (viz/Revision Backlog.txt + docs/other/viz-kanban.md)
+--------------------------------------------------------------------
+- DONE this session: run ingest + dropdown; partition rendering; near-edge fade + always-on
+  edges; isometric visibility; gizmo axis-snap; global size multiplier; per-aircraft tracking;
+  orientation stat; units declutter.
+- DROPPED (user): per-federate "skeleton" button; adjustable viewport seams.
+- REMAINING (wait on core/Live): vector-field overlay (stub); ghost rendering / Live
+  viewpoints; halo-from-meta; handoff owner-per-frame.
+
+HANDOFF
+-------
+Frontend at a strong stopping point; user set on frontend for now. Next frontend work is
+gated on core data: (a) per-frame `owner` for handoff attribution, (b) halo geometry in meta,
+(c) Live experiment (ghosts, vector field).

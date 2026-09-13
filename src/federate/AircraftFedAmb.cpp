@@ -99,18 +99,47 @@ void AircraftFedAmb::receiveInteraction(InteractionClassHandle theInteraction,
         return;
     }
 
-    // AssignSector: "your sector is this AABB" -- only if addressed to us.
+    // AssignSector: one per slab, tagged with its owner, BROADCAST to every federate. Keep
+    // them ALL as the partition map (so we can compute a handoff destination ourselves,
+    // peer-to-peer, with no controller round-trip); the slab(s) owned by ME are ALSO
+    // installed into World for leave-detection.
     if (theInteraction == this->assignSectorClass) {
         it = theParameterValues.find(this->sectorTarget);
         if (it == theParameterValues.end()) return;
-        if (decodeString(it->second) != this->myName) return;
+        wstring owner = decodeString(it->second);
 
         Sector s;
         if ((it = theParameterValues.find(sectorId))  != theParameterValues.end()) s.id  = decodeUint32(it->second);
         if ((it = theParameterValues.find(sectorMin)) != theParameterValues.end()) s.min = decodeVec3(it->second);
         if ((it = theParameterValues.find(sectorMax)) != theParameterValues.end()) s.max = decodeVec3(it->second);
-        this->assignedSectors.push_back(s);
-        wcout << L"[" << myName << L"] assigned sector " << s.id << endl;
+
+        RegionOwner ro; ro.owner = owner; ro.sector = s;
+        this->partitionMap.push_back(ro);
+        if (owner == this->myName) {
+            this->assignedSectors.push_back(s);
+            wcout << L"[" << myName << L"] assigned sector " << s.id << L" (mine)" << endl;
+        }
+        return;
+    }
+
+    // Handoff: a peer is transferring an aircraft to US -- adopt only if addressed to me.
+    // Queue it (id + exact state + the logical step the state is valid at); the federate
+    // drains the queue in its serve loop and continues integrating from step+1.
+    if (theInteraction == this->handoffClass) {
+        it = theParameterValues.find(this->handoffTarget);
+        if (it == theParameterValues.end()) return;
+        if (decodeString(it->second) != this->myName) return;   // not addressed to me
+
+        HandoffIn h;
+        if ((it = theParameterValues.find(handoffId))     != theParameterValues.end()) h.spec.id               = decodeUint32(it->second);
+        if ((it = theParameterValues.find(handoffPos))    != theParameterValues.end()) h.spec.initial.position = decodeVec3(it->second);
+        if ((it = theParameterValues.find(handoffVel))    != theParameterValues.end()) h.spec.initial.velocity = decodeVec3(it->second);
+        if ((it = theParameterValues.find(handoffOrient)) != theParameterValues.end()) h.spec.initial.attitude = decodeQuat(it->second);
+        if ((it = theParameterValues.find(handoffAngV))   != theParameterValues.end()) h.spec.initial.angularV = decodeVec3(it->second);
+        if ((it = theParameterValues.find(handoffStep))   != theParameterValues.end()) h.step                  = decodeUint32(it->second);
+        this->incomingHandoffs.push_back(h);
+        wcout << L"[" << myName << L"] received handoff of entity " << h.spec.id
+              << L" at step " << h.step << endl;
         return;
     }
 
@@ -121,8 +150,10 @@ void AircraftFedAmb::receiveInteraction(InteractionClassHandle theInteraction,
         if ((it = theParameterValues.find(startDt))       != theParameterValues.end()) this->dt       = decodeDouble(it->second);
         if ((it = theParameterValues.find(startWorldMin)) != theParameterValues.end()) this->worldMin = decodeVec3(it->second);
         if ((it = theParameterValues.find(startWorldMax)) != theParameterValues.end()) this->worldMax = decodeVec3(it->second);
+        if ((it = theParameterValues.find(startNumSteps)) != theParameterValues.end()) this->numSteps = decodeUint32(it->second);
         this->startReceived = true;
-        wcout << L"[" << myName << L"] StartRun received (dt=" << this->dt << L")" << endl;
+        wcout << L"[" << myName << L"] StartRun received (dt=" << this->dt
+              << L", numSteps=" << this->numSteps << L")" << endl;
         return;
     }
 

@@ -31,6 +31,10 @@ static const Vec3   WORLD_MIN  = Vec3(0.0,    0.0,    -500.0);
 static const Vec3   WORLD_MAX  = Vec3(2500.0, 1500.0,  500.0);
 static const Axis   SPLIT_AXIS = Axis::Y;
 static const double DT         = 0.1;
+// The run length now lives HERE, on the controller, not as a hardcoded loop bound inside
+// the federate. Broadcast in StartRun so every federate runs the identical logical window
+// [1, NUM_STEPS]. (Constant for now; a later step can source it from the scenario file.)
+static const unsigned int NUM_STEPS = 100;
 
 // Non-blocking check for ENTER on stdin (Linux/container). Returns true once the operator
 // hits ENTER, consuming the line. This lets the controller keep PUMPING callbacks while it
@@ -117,6 +121,7 @@ void ControllerFederate::cacheHandles() {
     startDt              = rtiamb->getParameterHandle(startClass,  L"Dt");
     startWorldMin        = rtiamb->getParameterHandle(startClass,  L"WorldMin");
     startWorldMax        = rtiamb->getParameterHandle(startClass,  L"WorldMax");
+    startNumSteps        = rtiamb->getParameterHandle(startClass,  L"NumSteps");
     sectorTarget         = rtiamb->getParameterHandle(assignSectorClass, L"TargetFederate");
     sectorId             = rtiamb->getParameterHandle(assignSectorClass, L"SectorId");
     sectorMin            = rtiamb->getParameterHandle(assignSectorClass, L"Min");
@@ -257,9 +262,11 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
     s[startDt]       = encodeDouble(DT);
     s[startWorldMin] = encodeVec3(WORLD_MIN);
     s[startWorldMax] = encodeVec3(WORLD_MAX);
+    s[startNumSteps] = encodeUint32(NUM_STEPS);
     VariableLengthData startTag((void*)"start", 6);
     rtiamb->sendInteraction(startClass, s, startTag);
-    wcout << L"[controller] StartRun broadcast (dt=" << DT << L")." << endl;
+    wcout << L"[controller] StartRun broadcast (dt=" << DT
+          << L", numSteps=" << NUM_STEPS << L")." << endl;
 
     // Nudge the callback pump so the outgoing interactions flush before we idle.
     for (int i = 0; i < 5; ++i) rtiamb->evokeMultipleCallbacks(0.02, 0.05);

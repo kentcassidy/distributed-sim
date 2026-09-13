@@ -57,5 +57,6 @@ private:
     ParameterHandle startDt;
     ParameterHandle startWorldMin;
     ParameterHandle startWorldMax;
+    ParameterHandle startNumSteps;
     ParameterHandle sectorTarget, sectorId, sectorMin, sectorMax;
 };

@@ -4,6 +4,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 #include <fstream>
 #include <RTI/RTI1516.h>
 #include "AircraftFedAmb.hpp"
@@ -35,11 +36,15 @@ private:
     void publishAndSubscribe();
     void sendEnroll(wstring federateName);        // announce this federate to the controller
     void waitForStart();                          // pump callbacks until StartRun latches
-    void buildWorld();                            // adopt assignments -> world + objects + meta
-    void runLoop();                               // integrate + publish + NDJSON, all owned
-    void logFrame(double simTime);                // publish + write one NDJSON frame (all owned)
-    void checkLeavers(int step);                  // report owned aircraft that left our sector
-    void serveUntilShutdown();                    // hold (keep pumping) until the controller stops us
+    void buildWorld();                            // adopt assignments + full map -> world + meta
+    void runLoop();                               // serve loop: advance/log/hand off until Shutdown
+    void emitRecord(const Aircraft& ac, long long step);      // one NDJSON line for ONE aircraft
+    void drainHandoffs();                         // adopt any peer handoffs addressed to us
+    bool tryDepart(size_t k);                     // hand off / lose owned[k] if it left my sector
+    void sendHandoff(const wstring& dest, const Aircraft& ac, long long step);
+    void releaseAircraft(EntityId id, size_t k);  // delete instance + drop from owned_ / maps
+    bool inMySector(const Vec3& p) const;         // inside any sector I own (inclusive)
+    wstring ownerOf(const Vec3& p) const;         // owning federate for p (half-open); L"" = the void
     void resignAndDestroy();
 
     unique_ptr<RTIambassador> rtiamb;
@@ -53,17 +58,22 @@ private:
     // Interaction handles: Enroll (we publish), AssignEntity + StartRun (we subscribe)
     InteractionClassHandle enrollClass;
     ParameterHandle        enrollFederateName;
-    InteractionClassHandle assignClass, startClass, shutdownClass, assignSectorClass;
+    InteractionClassHandle assignClass, startClass, shutdownClass, assignSectorClass, handoffClass;
     ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient, assignAngV;
-    ParameterHandle        startDt, startWorldMin, startWorldMax;
+    ParameterHandle        startDt, startWorldMin, startWorldMax, startNumSteps;
     ParameterHandle        sectorTarget, sectorId, sectorMin, sectorMax;
+    ParameterHandle        handoffTarget, handoffId, handoffPos, handoffVel, handoffOrient, handoffAngV, handoffStep;
 
     // One HLA object instance per owned aircraft (id -> instance handle).
     map<EntityId, ObjectInstanceHandle> ownedObjects;
 
-    std::set<EntityId>   leaversSeen_;   // ids already reported as having left our sector
+    std::map<EntityId, long long> acStep_;         // per-aircraft logical step (# of dt advances)
+    std::vector<RegionOwner>      partitionMap_;    // whole partition (all sectors + owners)
+    std::set<EntityId>            finishedPrinted_; // aircraft already announced as complete
+    size_t                        handoffsAdopted_ = 0;  // drain cursor into fedamb.incomingHandoffs
 
     double               dt_ = 0.1;
+    int                  numSteps_ = 100;   // run length, set from the controller's StartRun
     LinearLongitudinal   model_;   // declared BEFORE world_ so it outlives borrowing aircraft
     World                world_;
     ofstream             log_;     // NDJSON frames for the browser viewer

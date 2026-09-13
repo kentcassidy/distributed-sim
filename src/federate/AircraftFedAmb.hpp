@@ -20,6 +20,21 @@ struct GhostRecord {
     State state;
 };
 
+// One entry of the broadcast partition map: a sector and the federate that owns it. Every
+// federate keeps the WHOLE map (not just its own slab) so it can compute, on its own, which
+// peer to hand a departing aircraft to -- no controller round-trip (peer-to-peer migration).
+struct RegionOwner {
+    wstring owner;
+    Sector  sector;
+};
+
+// A received Handoff, queued for the federate to adopt: the transferred aircraft (id + exact
+// state) and the logical step that state is valid at. The adopter continues from step+1.
+struct HandoffIn {
+    EntitySpec spec;
+    long long  step = 0;
+};
+
 // The federate's ears. Two jobs now:
 //   1) (existing) object discovery/reflection -- kept for the later Live experiment.
 //   2) (new) receiveInteraction for the control plane: collect the AssignEntity messages
@@ -46,16 +61,21 @@ public:
     InteractionClassHandle startClass;
     InteractionClassHandle shutdownClass;      // controller's "end the run" signal
     InteractionClassHandle assignSectorClass;  // controller's "your sector is ..." message
+    InteractionClassHandle handoffClass;       // peer-to-peer ownership transfer (fed -> fed)
     ParameterHandle        assignTarget, assignId, assignPos, assignVel, assignOrient, assignAngV;
-    ParameterHandle        startDt, startWorldMin, startWorldMax;
+    ParameterHandle        startDt, startWorldMin, startWorldMax, startNumSteps;
     ParameterHandle        sectorTarget, sectorId, sectorMin, sectorMax;
+    ParameterHandle        handoffTarget, handoffId, handoffPos, handoffVel, handoffOrient, handoffAngV, handoffStep;
 
     // --- received from the controller ---
     vector<EntitySpec> assignments;      // entities assigned to ME (id + initial State)
-    vector<Sector>     assignedSectors;  // sector(s) assigned to ME
+    vector<Sector>     assignedSectors;  // sector(s) assigned to ME (installed into World)
+    vector<RegionOwner> partitionMap;    // the WHOLE partition (all sectors + owners)
+    vector<HandoffIn>  incomingHandoffs; // peer handoffs addressed to ME, awaiting adoption
     bool  startReceived = false;         // latched when StartRun arrives
     bool  shutdownReceived = false;      // latched when Shutdown arrives
     double dt = 0.1;                   // from StartRun
+    unsigned int numSteps = 100;       // from StartRun (controller owns the run length)
     Vec3  worldMin, worldMax;          // from StartRun
 
     AircraftFedAmb();

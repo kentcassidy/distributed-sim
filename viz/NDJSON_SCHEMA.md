@@ -30,13 +30,26 @@ the viewer draws the world + sector boxes directly instead of inferring them fro
 Because it has no aircraft frames, `dff_diff` ignores it (it contributes no `(id, step)` points),
 and the viewer treats it as the partition descriptor rather than a source of trajectories.
 
-## frame line (one per step)
+## frame line (one aircraft per line)
 
 ```json
-{"t":0.1,"wt":1694531200123456,"aircraft":[{"id":1,"role":"owned","pos":[x,y,z],"vel":[x,y,z],"quat":[x,y,z,w]}]}
+{"t":0.1,"wt":1694531200123456,"aircraft":[{"id":1,"owner":"A","role":"owned","pos":[x,y,z],"vel":[x,y,z],"quat":[x,y,z,w]}]}
 ```
 
-- `wt` — wall-clock time this frame was computed: integer **microseconds since the Unix
+The federate emits **one line per (aircraft, logical step)** — the `aircraft` array holds a
+single entry, and `t = step*dt` is *that aircraft's* own step. (The array is kept, so a
+multi-aircraft line still parses.) One-aircraft-per-line is what keeps the truth exactly-once
+under migration: a handed-off aircraft's steps are contiguous across two files (owner does
+`0..s`, adopter does `s+1..N`), each row labeled by the aircraft's own step regardless of how
+the federates' wall-clock loops interleave. The viewer already merges by `id` across files and
+sorts by time, so trajectories reconstruct without change.
+
+- `owner` — the federate that COMPUTED this step (explicit, not inferred from the file). Under
+  migration it **changes across an aircraft's track** at the crossover step: the previous owner
+  logs up to the transfer step, the new owner logs from the next step on. (Owner-per-frame
+  coloring in the viewer is a deferred item; `timeline.js` currently fixes an aircraft's
+  federate at first sighting.) Defaults to the file's federate when absent.
+- `wt` — wall-clock time this record was computed: integer **microseconds since the Unix
   epoch** (`system_clock`, comparable across federates on one host). **Metadata only** —
   nondeterministic, and never part of the truth/invariance check. It exists to show that the
   same LOGICAL step `t` was produced at different REAL times / interleavings (and by

@@ -14,3 +14,17 @@ DROPPED
 REMAINING (feature backlog -- wait on more core features)
 - Vector-field (wind/storm) overlay: the "Vector field" toggle is still a stub. (Needs the Live/environment work.)
 - Ghost rendering / Live viewpoints: render role:"ghost" distinctly once the Live experiment produces dead-reckoned ghosts.
+
+ON HOLD -- expectations pending core data (do NOT synthesize in the viewer)
+- HALO from meta: the halo region is SOURCE DATA the federates should define in meta, NOT
+  generated in the viewer. Current halo is a uniform-gap placeholder. Expected to appear once
+  near-seam collision is implemented. When the meta carries it, drive the halo from that.
+- HANDOFF ownership in the NDJSON: seam-crossing runs (e.g. root A/B, seam y=750) currently
+  do NOT reflect reassignment -- the aircraft is emitted by its ORIGINAL federate for every
+  frame (A keeps logging id 1 after it crosses into B; no owner field, role stays "owned").
+  So there is no explicit OR implicit ownership-change signal; the viewer must not infer it
+  from geometry (that would be faking). Needs the core to emit reassignment explicitly:
+  preferred = per-aircraft "owner" field per frame (or a {"handoff":{id,from,to,t}} event line;
+  or move emission to the new owner = implicit). THEN the viewer change: timeline.js currently
+  fixes an aircraft's federate at first sighting + merges by id, so it needs owner-per-frame so
+  color/attribution can follow the handoff over time.

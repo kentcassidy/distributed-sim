@@ -1,0 +1,18 @@
+Method A vs. Method B — go with A (owner computes and directs)
+
+  Method A is more realistic for our design, and it's not close — precisely because you've chosen static, globally-broadcast boundaries. The deciding factor is: the partition map is deterministic and known to everyone.
+
+  - With Method A, the releasing owner runs slabOf(pos) against the shared world bounds and gets exactly one destination federate. No round-trip, no ambiguity.
+  - Method B (broadcast "who can own this?" → volunteers) only earns its cost when the map isn't globally known, or is dynamic, or ownership is contended — because then you genuinely have to ask. In our case every federate would compute the
+    identical answer to that broadcast question, so the auction is pure chatter plus a tie-break you don't need. You'd also have to handle "two volunteers" and "zero volunteers" races that Method A makes impossible.
+
+  So: owner detects out-of-bounds → computes destination from the shared map → sends a directed handoff (full state + logical step) straight to that federate. The "lost in the void" case falls out for free: slabOf returns −1, no valid
+  destination exists, so the owner logs it lost and releases it. The controller is not in the runtime loop at all — which is exactly the HLA decentralization you flagged at the top.
+
+  Method B does map onto a real HLA idiom worth knowing — negotiatedAttributeOwnershipDivestiture ("I'm giving this up; acquirers, respond") — but that service exists for exactly the unknown-acquirer situation we've engineered away.
+
+  This is a genuine change from the approved plan, which routed the out-of-bounds notice through the controller and had the controller decide. Your model is better and simpler, but I want it explicit before I write code — see the confirmation at
+  the bottom
+
+
+Include in presentation, potentially that B is an existing method, but not for what we need
