@@ -325,6 +325,20 @@ void AircraftFederate::runLoop() {
             ++k;                          // still mine -> advance to the next aircraft
         }
 
+        // Announce the busy<->idle transition, so the operator can tell "still crunching" from
+        // "just holding" -- matters once a federate owns many aircraft. "Idle" = nothing left
+        // to compute right now (every owned aircraft is at STEPS, or I own none); it RE-ARMS if
+        // work returns (a late adoption), so a second "done" line genuinely means done again.
+        size_t pending = 0;
+        for (size_t j = 0; j < owned.size(); ++j) if (acStep_[owned[j].id()] < STEPS) ++pending;
+        if (pending == 0 && !idleAnnounced_) {
+            idleAnnounced_ = true;
+            wcout << L"[" << federateName_ << L"] all current tasks done -- " << owned.size()
+                  << L" owned aircraft at step " << STEPS << L"; idle, serving until Shutdown" << endl;
+        } else if (pending > 0) {
+            idleAnnounced_ = false;   // work (re)appeared -> re-arm the announcement
+        }
+
         rtiamb->evokeMultipleCallbacks(0.05, 0.1);   // flush/receive handoffs; keep controller serviced
     }
     wcout << L"[" << federateName_ << L"] Shutdown received; resigning." << endl;

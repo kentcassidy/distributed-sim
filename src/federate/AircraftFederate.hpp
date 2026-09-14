@@ -71,6 +71,7 @@ private:
     std::vector<RegionOwner>      partitionMap_;    // whole partition (all sectors + owners)
     std::set<EntityId>            finishedPrinted_; // aircraft already announced as complete
     size_t                        handoffsAdopted_ = 0;  // drain cursor into fedamb.incomingHandoffs
+    bool                          idleAnnounced_ = false; // printed "no pending work"? (re-armed when work returns)
 
     double               dt_ = 0.1;
     int                  numSteps_ = 100;   // run length, set from the controller's StartRun
