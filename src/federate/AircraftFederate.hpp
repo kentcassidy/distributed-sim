@@ -39,6 +39,8 @@ private:
     void buildWorld();                            // adopt assignments + full map -> world + meta
     void runLoop();                               // serve loop: advance/log/hand off until Shutdown
     void emitRecord(const Aircraft& ac, long long step);      // one NDJSON line for ONE aircraft
+    void emitEvent(const char* kind, EntityId id, long long step,
+                   const Vec3& pos, const wstring& to);       // NDJSON event line (handoff / out-of-bounds)
     void drainHandoffs();                         // adopt any peer handoffs addressed to us
     bool tryDepart(size_t k);                     // hand off / lose owned[k] if it left my sector
     void sendHandoff(const wstring& dest, const Aircraft& ac, long long step);

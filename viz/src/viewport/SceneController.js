@@ -86,14 +86,18 @@ export class SceneController {
     this.scene.add(key)
 
     this.worldGroup = new THREE.Group()
-    this.sectorGroup = new THREE.Group() // owner-colored partition boxes
+    this.sectorGroup = new THREE.Group() // primary run's owner-colored partition boxes
+    this.sectorGroup2 = new THREE.Group() // compare run's partition boxes (crossfaded)
+    this._sectorFx = [] // [{mat, base}] primary sector materials, for crossfade opacity
+    this._sectorFx2 = [] // compare sector materials
+    this.sectors2 = [] // compare run sectors
     this.overlayGroup = new THREE.Group()
     this.fleetGroup = new THREE.Group()
     this.labelGroup = new THREE.Group()
     this.fxGroup = new THREE.Group() // transient CSS2D effects (handoff diagrams)
     this._handoffFx = [] // active [{id, el, obj, start}]
     this.fleetGroup2 = new THREE.Group() // COMPARE run's aircraft (overlaid, crossfaded)
-    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.fleetGroup2, this.labelGroup, this.fxGroup)
+    this.scene.add(this.worldGroup, this.sectorGroup, this.sectorGroup2, this.overlayGroup, this.fleetGroup, this.fleetGroup2, this.labelGroup, this.fxGroup)
     this.meshes = new Map()
     this.meshes2 = new Map() // compare-run aircraft by id
     this.timeline2 = null // compare run timeline (null = not comparing)
@@ -276,6 +280,7 @@ export class SceneController {
     this._ownerOf2.clear()
     this.fedOf2.clear()
     this.timeline2 = timeline2 || null
+    this.sectors2 = this.timeline2 ? this.timeline2.sectors || [] : []
     if (this.timeline2) {
       for (const ac of this.timeline2.aircraft) {
         this.fedOf2.set(ac.id, ac.federate)
@@ -283,8 +288,8 @@ export class SceneController {
         this.fleetGroup2.add(mesh)
         this.meshes2.set(ac.id, mesh)
       }
-      this._applyResolution()
     }
+    this._buildWorldGeometry() // (re)build the compare run's partition tint/edges
     this._refreshFleet()
     this._applyTime(playback.t)
   }
@@ -292,6 +297,7 @@ export class SceneController {
   setCrossfade(x) {
     this.crossfade = Math.max(0, Math.min(1, Number(x)))
     this._refreshFleet()
+    this._applySectorOpacity()
   }
 
   setSectorsVisible(on) {
@@ -485,9 +491,12 @@ export class SceneController {
   _buildWorldGeometry() {
     this._clearGroup(this.worldGroup)
     this._clearGroup(this.sectorGroup)
+    this._clearGroup(this.sectorGroup2)
     this._clearGroup(this.overlayGroup)
     this._fedBoxes.clear()
     this._fatMaterials = []
+    this._sectorFx = []
+    this._sectorFx2 = []
     this.worldspace = null
     if (!this.world) {
       this._sole = null
@@ -514,28 +523,48 @@ export class SceneController {
       this.worldspace = buildWorldspace(slab, this.palette, { axes: false, wallColor, edgeColor: owner })
       this.worldGroup.add(this.worldspace.group)
       this._labelBounds = slab
-      if (this.showSectors) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s)
+      if (this.showSectors) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
     } else {
       // standard/fused view: the whole world as the gridded, shaded room
       this.worldspace = buildWorldspace(this.world, this.palette, { axes: true })
       this.worldGroup.add(this.worldspace.group)
       this._labelBounds = this.world
-      if (this.showSectors) for (const s of this.sectors) this._addSectorReveal(s)
+      if (this.showSectors) for (const s of this.sectors) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
+    }
+
+    // COMPARE: the second run's partition tint/edges, crossfaded against the primary's. Same
+    // world box (shared), so only the run-specific slabs overlay + fade.
+    if (this.timeline2 && this.showSectors) {
+      for (const s of this.sectors2) this._addSectorReveal(s, this.sectorGroup2, this.timeline2, this._sectorFx2)
     }
 
     this._buildOverlays()
     this._buildLabels()
     this._applyResolution()
+    this._applySectorOpacity()
   }
 
-  // A revealed slab: fat owner-colored edges + a faint owner-tinted volume. Used by the global
-  // "Sectors" reveal (and, in a partition view, for the OTHER slabs).
-  _addSectorReveal(sec) {
-    const color = this._fedColor(sec.owner)
+  // A revealed slab: fat owner-colored edges + a faint owner-tinted volume ("walls"). Added to
+  // `group` and its materials tracked in `fxList` so the run crossfade can scale their opacity.
+  _addSectorReveal(sec, group, colorTl, fxList) {
+    const color = this._fedColorIn(colorTl, sec.owner)
     const { seg, mat } = fatBox(sec, color, HIGHLIGHT_LW, 0.8)
-    this.sectorGroup.add(seg)
+    group.add(seg)
     this._fatMaterials.push(mat)
-    if (this.showTint) this.sectorGroup.add(faceTint(sec, color, 0.1))
+    fxList.push({ mat, base: 0.8 })
+    if (this.showTint) {
+      const tint = faceTint(sec, color, 0.1)
+      group.add(tint)
+      fxList.push({ mat: tint.material, base: 0.1 })
+    }
+  }
+
+  // Crossfade the two runs' partition tint/edges (simple linear; colors are NOT normalized).
+  _applySectorOpacity() {
+    const lw = this.timeline2 ? 1 - this.crossfade : 1
+    const rw = this.timeline2 ? this.crossfade : 0
+    for (const f of this._sectorFx) f.mat.opacity = f.base * lw
+    for (const f of this._sectorFx2) f.mat.opacity = f.base * rw
   }
 
   // Per-federate highlight (fat solid edges) + halo (fine dashes), one per federate, hidden
@@ -597,6 +626,7 @@ export class SceneController {
     this._clearHandoffFx()
     this._clearGroup(this.worldGroup)
     this._clearGroup(this.sectorGroup)
+    this._clearGroup(this.sectorGroup2)
     this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
     this._clearGroup(this.fleetGroup2)

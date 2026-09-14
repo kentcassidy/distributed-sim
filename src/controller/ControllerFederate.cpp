@@ -22,14 +22,12 @@ static const wstring FEDERATION = L"DffFederation";
 static const wstring FOM_MODULE = L"foms/dff-fom.fed";
 
 // The run config the controller OWNS and disseminates. World bounds are half-open [min,max)
-// (the Partition rule), chosen so the two hand-authored aircraft sit cleanly inside and the
-// K=2 y-seam (y=750 for a [0,1500) span) falls between their lanes (500 and 1000). The X
-// corridor is 2500 m -- comfortably longer than the ~2000 m the aircraft cover in a 100-step
-// run, without the wasted length of a 20 km box. (Easily tuned; the X extent starts to matter
-// once we split on X for migration.)
+// (the Partition rule). The volume is tiled into K cells by RECURSIVE COORDINATE BISECTION
+// (Partition.hpp) -- there is no fixed split axis: RCB bisects each cell's LONGEST side, so a
+// wide box splits on X first, then Y, keeping cells compact. Bounds are easily tuned; keep
+// them in sync with src/tools/gen_scenario.cpp (which places aircraft inside this same box).
 static const Vec3   WORLD_MIN  = Vec3(0.0,    0.0,    -500.0);
 static const Vec3   WORLD_MAX  = Vec3(2500.0, 1500.0,  500.0);
-static const Axis   SPLIT_AXIS = Axis::Y;
 static const double DT         = 0.1;
 // The run length now lives HERE, on the controller, not as a hardcoded loop bound inside
 // the federate. Broadcast in StartRun so every federate runs the identical logical window
@@ -182,28 +180,40 @@ void ControllerFederate::partitionAndDisseminate(const wstring& scenarioPath) {
     string path(scenarioPath.begin(), scenarioPath.end());
     Scenario scn = loadScenario(path);
 
-    // Tile the volume into K slabs and assign each entity by its initial position.
-    vector<Sector>    sectors    = tileVolume(WORLD_MIN, WORLD_MAX, SPLIT_AXIS, K);
-    map<EntityId,int> assignment = assignEntities(scn, WORLD_MIN, WORLD_MAX, SPLIT_AXIS, K);
+    // Tile the volume into K cells by RCB and assign each entity by its initial position.
+    vector<Sector>    sectors    = tileVolume(WORLD_MIN, WORLD_MAX, K);
+    map<EntityId,int> assignment = assignEntities(scn, sectors);
 
-    // Show the slab geometry so the spatial partition is legible. Split axis is Y here, so
-    // print each slab's half-open Y range and its owner -- including any IDLE slab whose
-    // range holds no aircraft (that owner simply gets no AssignEntity).
-    wcout << L"\n[controller] K=" << K << L": world Y[" << WORLD_MIN.y << L"," << WORLD_MAX.y
-          << L") split into " << K << L" slab(s):" << endl;
+    // Show the cell geometry so the spatial partition is legible: each RCB cell's full AABB
+    // and its owner -- including any IDLE cell that holds no aircraft (that owner simply gets
+    // no AssignEntity, but still learns the cell so it can receive a handoff into it).
+    wcout << L"\n[controller] K=" << K << L": world tiled into " << K << L" RCB cell(s):" << endl;
     for (size_t i = 0; i < sectors.size(); ++i) {
-        wcout << L"  slab " << i << L": y in [" << sectors[i].min.y << L", "
-              << sectors[i].max.y << L") -> owner " << roster[i] << endl;
+        const Sector& s = sectors[i];
+        wcout << L"  cell " << i
+              << L": x[" << s.min.x << L"," << s.max.x << L")"
+              << L" y[" << s.min.y << L"," << s.max.y << L")"
+              << L" z[" << s.min.z << L"," << s.max.z << L") -> owner " << roster[i] << endl;
+    }
+
+    // Scenario name for the viewer: basename without extension (e.g. "scenarios/random.csv"
+    // -> "random"). Tagged into the controller meta so the viz can label the run.
+    std::string scenNarrow(scenarioPath.begin(), scenarioPath.end());
+    {
+        size_t slash = scenNarrow.find_last_of("/\\");
+        if (slash != std::string::npos) scenNarrow = scenNarrow.substr(slash + 1);
+        size_t dot = scenNarrow.find_last_of('.');
+        if (dot != std::string::npos) scenNarrow = scenNarrow.substr(0, dot);
     }
 
     // Write the controller's partition descriptor for the VIEWER: one meta-only line with the
-    // world bounds + every sector and its owner. The viz reads THIS authoritative file to draw
-    // the world/sector boxes, instead of inferring geometry from per-federate truth. It has no
-    // aircraft frames, so dff_diff ignores it (contributes no (id,step) points).
+    // scenario name, world bounds, and every sector and its owner. The viz reads THIS
+    // authoritative file to draw the world/sector boxes + label the run, instead of inferring
+    // geometry from per-federate truth. It has no aircraft frames, so dff_diff ignores it.
     {
         std::ofstream desc("sim_out/controller.ndjson");
         desc << std::setprecision(17);
-        desc << "{\"meta\":{\"federate\":\"controller\",\"dt\":" << DT
+        desc << "{\"meta\":{\"federate\":\"controller\",\"scenario\":\"" << scenNarrow << "\",\"dt\":" << DT
              << ",\"world\":{\"min\":[" << WORLD_MIN.x << "," << WORLD_MIN.y << "," << WORLD_MIN.z << "]"
              << ",\"max\":[" << WORLD_MAX.x << "," << WORLD_MAX.y << "," << WORLD_MAX.z << "]}"
              << ",\"sectors\":[";

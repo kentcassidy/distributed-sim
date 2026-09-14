@@ -14,7 +14,7 @@
 // setprecision(17).)
 //
 // Aircraft are placed UNIFORMLY inside the world (a small inset keeps them off the
-// half-open max faces, which the controller's slabOf() rejects), each with a velocity in a
+// half-open max faces, which the controller's cellOf() rejects), each with a velocity in a
 // uniformly-random 3D direction at a random speed. So they cross sector seams in every
 // direction AND some fly clear out of the world -- exercising both the peer handoff and the
 // "lost in the void" path in one run.

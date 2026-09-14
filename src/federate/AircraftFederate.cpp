@@ -367,6 +367,24 @@ void AircraftFederate::emitRecord(const Aircraft& ac, long long step) {
          << "]}]}\n";
 }
 
+// One NDJSON EVENT line marking a departure: a "handoff" (`to` = the new owner) or an
+// "out_of_bounds" loss (`to` empty -- it left the world). It carries `t` + `id` but NO
+// `{"id":...}` aircraft entry, so dff_diff ignores it (contributes no (id,step) truth point):
+// the event is metadata for the viewer to annotate the crossover/exit, never part of the
+// invariance check. Emitted at the step the departure was detected, right before release.
+void AircraftFederate::emitEvent(const char* kind, EntityId id, long long step,
+                                 const Vec3& pos, const wstring& to) {
+    std::string from(federateName_.begin(), federateName_.end());
+    log_ << "{\"t\":" << (step * dt_) << ",\"wt\":" << wallMicros()
+         << ",\"event\":\"" << kind << "\",\"id\":" << id
+         << ",\"from\":\"" << from << "\"";
+    if (!to.empty()) {
+        std::string toN(to.begin(), to.end());
+        log_ << ",\"to\":\"" << toN << "\"";
+    }
+    log_ << ",\"pos\":[" << pos.x << "," << pos.y << "," << pos.z << "]}\n";
+}
+
 // Adopt any handoffs peers have sent us since we last drained. We take the EXACT transferred
 // state at the transfer step and do NOT log that step (the previous owner already did) -- so
 // coverage stays exactly-once. The next serve-loop iteration advances it to step+1 and logs on.
@@ -401,7 +419,8 @@ bool AircraftFederate::tryDepart(size_t k) {
     std::wstring dest = ownerOf(p);
 
     if (dest.empty()) {
-        // Left the whole world: nobody owns where it went. Log it and stop simulating it.
+        // Left the whole world: nobody owns where it went. Log it (console + NDJSON) and stop.
+        emitEvent("out_of_bounds", id, step, p, L"");
         wcout << L"[" << federateName_ << L"] aircraft " << id
               << L" LEFT THE WORLD at step " << step << L" (pos " << p
               << L") -- lost in the void" << endl;
@@ -411,6 +430,7 @@ bool AircraftFederate::tryDepart(size_t k) {
         return false;
     } else {
         sendHandoff(dest, ac, step);
+        emitEvent("handoff", id, step, p, dest);
         wcout << L"[" << federateName_ << L"] aircraft " << id
               << L" left my sector at step " << step << L" -> handoff to " << dest << endl;
     }
@@ -459,7 +479,7 @@ bool AircraftFederate::inMySector(const Vec3& p) const {
 }
 
 // Which federate owns point p? Scan the full partition map with the UNIFORM HALF-OPEN rule
-// ([min,max) on every axis) -- the same rule the controller's slabOf() used to assign
+// ([min,max) on every axis) -- the same rule the controller's cellOf() uses to assign
 // ownership, so a departing aircraft goes to exactly the federate the controller would pick.
 // Returns L"" if p is outside every region (it left the world -> lost in the void).
 wstring AircraftFederate::ownerOf(const Vec3& p) const {
