@@ -32,6 +32,7 @@ export function makeAircraftMesh(color = 0xe08a3c) {
     metalness: 0.0,
     side: THREE.DoubleSide,   // visible from above and below
     flatShading: true,        // crisp facets -- reads clean, no smoothing artifacts
+    transparent: true,        // opacity is driven live (run crossfade); 1.0 reads as opaque
   })
 
   const mesh = new THREE.Mesh(geom, mat)

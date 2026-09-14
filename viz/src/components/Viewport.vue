@@ -19,6 +19,8 @@ const props = defineProps({
   showTint: { type: Boolean, default: true },
   sizeMultiplier: { type: Number, default: 1 },
   trackId: { type: Number, default: null },
+  timeline2: { type: Object, default: null },
+  crossfade: { type: Number, default: 0.5 },
   projection: { type: String, default: 'perspective' },
   recenterWorldNonce: { type: Number, default: 0 },
   recenterFed: { type: Object, default: () => ({ name: null, n: 0 }) },
@@ -40,6 +42,8 @@ function applyAll() {
   scene.setSizeMultiplier(props.sizeMultiplier)
   scene.setSectorsVisible(props.showSectors)
   scene.setProjection(props.projection)
+  scene.setCrossfade(props.crossfade)
+  scene.setCompare(props.timeline2)
   scene.setTrack(props.trackId)
 }
 
@@ -69,6 +73,8 @@ watch(() => props.showWorldFrame, (v) => scene?.setWorldFrameVisible(v))
 watch(() => props.showTint, (v) => scene?.setTintVisible(v))
 watch(() => props.sizeMultiplier, (v) => scene?.setSizeMultiplier(v))
 watch(() => props.trackId, (v) => scene?.setTrack(v))
+watch(() => props.timeline2, (v) => scene?.setCompare(v))
+watch(() => props.crossfade, (v) => scene?.setCrossfade(v))
 watch(() => props.projection, (v) => scene?.setProjection(v))
 
 watch(() => props.recenterWorldNonce, () => scene?.recenterWorld())

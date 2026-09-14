@@ -74,34 +74,76 @@ WHAT WAS BUILT (all under viz/)
    - Halo margin bug spotted + made uniform (constant absolute gap on every face instead of
      per-axis %, which had ballooned the long-edge ends) -- but see ON HOLD below.
 
+7) HANDOFF ATTRIBUTION (owner-per-frame) -- landed once the core emitted `owner`
+   Core added an explicit per-aircraft `owner` per NDJSON row that flips at the crossover
+   step (verified on run k2, seam y=750: id1 A->B and id2 B->A both at t=6.0; a track now
+   spans BOTH files). Viewer updated to honor it:
+   - timeline.js: carries owner-per-step (reordered on sort); stamps the HOME federate as the
+     EARLIEST owner (owner[0] after sort), fixing id2 wrongly grouping under A (its t=0 row is
+     B's); sample(t) returns the live owner as a step function (floor of the crossover).
+   - SceneController: _styleMesh is keyed to the CURRENT owner -- color, size, and per-federate
+     PANE VISIBILITY all follow it, updated every frame in _applyTime. So a plane recolors at
+     t=6 and, in Separated - All, LEAVES its old federate's pane and APPEARS in the new one.
+     Tracking (_canTrack/_zoom) uses the live owner too.
+   - App.vue: the aircraft-panel dot recolors live (ownerCss); the stat shows "owner" with a
+     "<= home" marker once it differs from where it started.
+   - No geometry inference -- purely the real `owner` field. Missing owner falls back to the
+     file's federate (older/non-handoff runs unaffected).
+
+8) HANDOFF QoL
+   - Highlight: added a faint RED selection outline (aircraftMesh.js: EdgesGeometry overlay,
+     0xff3b30 @ 0.5, depthTest OFF so it reads from any camera angle; a child of the mesh so it
+     follows transform/scale). Shown only in "highlight" mode, on top of the size + emissive.
+   - Handoff diagram: on a forward-playback owner flip, each pane floats a small
+     [from-color circle] -> [to-color circle] above the aircraft (federate dot colors), holds
+     ~0.35s then fades by ~1.1s (CSS2D). Gated on playback.playing so scrubbing doesn't spam it;
+     per-pane; cleared on run switch/dispose. Knobs: HANDOFF_FX_MS / HANDOFF_FX_HOLD + the 0.05
+     above-offset; outline color/opacity in aircraftMesh.js.
+
+9) POLISH / TUNING (final values after user review)
+   - Handoff diagram timing: holds full for 1.4s then a ~0.4s fade (HANDOFF_FX_HOLD=1400,
+     HANDOFF_FX_MS=1800).
+   - Highlight size gain toned down 1.7x -> 1.2x (HIGHLIGHT_SCALE); brightness unchanged.
+   - Red selection outline is now a FAT line (LineSegments2 @ linewidth 2, 0xff3b30 @ 0.55,
+     depthTest off) so it's genuinely ~1px thicker; pixel-width (constant regardless of marker
+     scale). SceneController._applyResolution keeps each mesh outline's LineMaterial.resolution
+     current on resize.
+   - Global size multiplier range widened: base 8 -> 16 (0.0625x .. 16x, still centered 1x,
+     dbl-click resets).
+   - Per-federate size row: added a reset-to-default (40 m) button; slider squashed (min-width:0,
+     tighter gap) + a fixed-width right-aligned value column so the "m" no longer clips.
+   - Arrow-key transport now steps by the program dt on the dt grid (snap to round(t/dt), then
+     +/- n frames; Shift=10, Ctrl=50) instead of 1ms JS-render nudges.
+
+ORIENTATION NOTE (answered, no change)
+   The paper-plane marker copies the emitted quaternion each frame, so orientation IS rendered.
+   A strafing aircraft (vel has +Y) still points +X because the filler physics emits a quat with
+   PITCH only (rotation about Y), heading/roll = 0 -- the lateral motion is pure translation in
+   the truth. So it's the data, not a render gap. A "point along velocity" marker mode is possible
+   but would be viewer-invented (diverges from the emitted quaternion); left OFF unless requested.
+
 ON HOLD -- expectations pending core data (viewer must NOT synthesize)
 ---------------------------------------------------------------------
 - HALO from meta: the halo region is SOURCE DATA the federates should define in meta, NOT
   generated in the viewer. Current halo is a uniform-gap placeholder (internal note left in
   SceneController._buildOverlays). Expected once near-seam collision lands; drive it from the
   meta then.
-- HANDOFF ownership in the NDJSON: investigated the seam-crossing run (root A/B, seam y=750).
-  Aircraft cross the seam geometrically (id1 y 400->994, id2 y 1100->500 at ~t6), but the
-  data does NOT reflect reassignment: each aircraft is emitted by its ORIGINAL federate for
-  all 101 frames (A keeps logging id 1 after it enters B's sector), no owner field, role stays
-  "owned". So there is no explicit OR implicit ownership-change signal, and the viewer must
-  not infer it from geometry (that would be faking). The core devlog confirms this is
-  migration M2 "report only, no transfer yet"; M4/M5 plan an explicit per-frame "owner" field
-  -- exactly what's needed. When it lands, timeline.js needs owner-per-frame (it currently
-  fixes an aircraft's federate at first sighting + merges by id) so color/attribution can
-  follow the handoff over time.
+- HANDOFF ownership in the NDJSON: RESOLVED (see section 7). Was on hold pending the core's
+  explicit per-frame `owner`; that landed, and the viewer now follows it. Left here only as the
+  trail of how it was diagnosed (M2 "report only" -> M4/M5 explicit owner).
 
 BACKLOG STATUS (viz/Revision Backlog.txt + docs/other/viz-kanban.md)
 --------------------------------------------------------------------
 - DONE this session: run ingest + dropdown; partition rendering; near-edge fade + always-on
   edges; isometric visibility; gizmo axis-snap; global size multiplier; per-aircraft tracking;
-  orientation stat; units declutter.
+  orientation stat; units declutter; HANDOFF owner-per-frame attribution (live recolor +
+  pane-hop + panel owner); highlight red outline; handoff "owner->owner" diagram.
 - DROPPED (user): per-federate "skeleton" button; adjustable viewport seams.
 - REMAINING (wait on core/Live): vector-field overlay (stub); ghost rendering / Live
-  viewpoints; halo-from-meta; handoff owner-per-frame.
+  viewpoints; halo-from-meta (source data, not synthesized).
 
 HANDOFF
 -------
-Frontend at a strong stopping point; user set on frontend for now. Next frontend work is
-gated on core data: (a) per-frame `owner` for handoff attribution, (b) halo geometry in meta,
-(c) Live experiment (ghosts, vector field).
+Frontend at a strong stopping point; user set on frontend for now. Handoff attribution is now
+DONE end-to-end (core emits `owner`, viewer follows it). Remaining frontend work is gated on
+core/Live data: (a) halo geometry in meta, (b) Live experiment (ghosts, vector field).

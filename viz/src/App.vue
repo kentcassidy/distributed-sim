@@ -17,6 +17,12 @@ const federates = ref([])
 const runs = ref([])
 const currentRun = ref(null)
 
+// compare: overlay a second run, crossfaded against the primary (left) run
+const compare = ref(false)
+const rightRun = ref(null)
+const timeline2 = shallowRef(null)
+const crossfade = ref(0.5) // 0 = primary (left) only, 1 = compare (right) only
+
 // world / view options
 const theme = ref('light')
 const showGizmo = ref(true)
@@ -28,7 +34,7 @@ const isometric = ref(false)
 
 // global marker-size multiplier: slider position in [-1,1] maps exponentially so the center is 1x
 const sizeExp = ref(0)
-const sizeMul = computed(() => Math.pow(8, sizeExp.value)) // 0.125x .. 8x, centered at 1x
+const sizeMul = computed(() => Math.pow(16, sizeExp.value)) // 0.0625x .. 16x, centered at 1x
 
 // per-aircraft camera tracking (null = free camera)
 const trackedId = ref(null)
@@ -132,9 +138,13 @@ function onKey(e) {
     togglePlay()
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault()
+    // Step by the program's logical timestep dt: snap to the dt grid, then move n frames
+    // (Shift = 10, Ctrl = 50). Lands exactly on the emitted steps rather than JS render frames.
     const dir = e.key === 'ArrowRight' ? 1 : -1
-    const step = e.ctrlKey ? 5 : e.shiftKey ? 1 : 0.001
-    seek(currentT.value + dir * step)
+    const dt = timeline.value?.dt || 0.1
+    const n = e.ctrlKey ? 50 : e.shiftKey ? 10 : 1
+    const stepIdx = Math.round(currentT.value / dt)
+    seek((stepIdx + dir * n) * dt)
   }
 }
 // Load one run (folder) into the view, resetting the per-run UI state (federate + aircraft
@@ -169,6 +179,28 @@ async function openRun(run) {
   } catch (e) {
     status.value = `Could not load run "${run}": ` + e.message
     console.error(e)
+  }
+}
+
+// compare-run loaders
+async function openRightRun(run) {
+  rightRun.value = run
+  try {
+    timeline2.value = await loadRun(run)
+  } catch (e) {
+    timeline2.value = null
+    console.error(e)
+  }
+}
+function toggleCompare(on) {
+  compare.value = on
+  if (on) {
+    if (!rightRun.value || rightRun.value === currentRun.value) {
+      rightRun.value = runs.value.find((r) => r !== currentRun.value) || currentRun.value
+    }
+    openRightRun(rightRun.value)
+  } else {
+    timeline2.value = null
   }
 }
 
@@ -229,6 +261,9 @@ function toggleFedHalo(name) {
 function onFedSize(name, e) {
   fedUi[name].size = Number(e.target.value)
 }
+function resetFedSize(name) {
+  fedUi[name].size = DEFAULT_AIRCRAFT_SIZE
+}
 function toggleExpand(id) {
   acUi[id].expanded = !acUi[id].expanded
 }
@@ -237,6 +272,15 @@ function setMode(id, mode) {
 }
 function toggleTrack(id) {
   trackedId.value = trackedId.value === id ? null : id
+}
+// Order the tracker steps through = the currently displayed fleet order.
+const trackOrder = computed(() => fleetGroups.value.flatMap((g) => g.items.map((a) => a.id)))
+function stepTrack(dir) {
+  const order = trackOrder.value
+  if (!order.length) return
+  const cur = order.indexOf(trackedId.value)
+  const idx = cur === -1 ? (dir > 0 ? 0 : order.length - 1) : (cur + dir + order.length) % order.length
+  trackedId.value = order[idx]
 }
 
 // live stats
@@ -297,6 +341,23 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
         </section>
 
         <section>
+          <h2>Compare</h2>
+          <label class="opt"><input type="checkbox" :checked="compare" @change="toggleCompare($event.target.checked)" :disabled="runs.length < 2" /> Overlay a second run</label>
+          <template v-if="compare">
+            <label class="run">vs
+              <select :value="rightRun" @change="openRightRun($event.target.value)">
+                <option v-for="r in runs" :key="r" :value="r">{{ r }}</option>
+              </select>
+            </label>
+            <div class="xfade">
+              <span class="xlbl" :title="currentRun">{{ currentRun }}</span>
+              <input type="range" min="0" max="1" step="0.01" :value="crossfade" @input="crossfade = Number($event.target.value)" @dblclick="crossfade = 0.5" title="crossfade (double-click to center)" />
+              <span class="xlbl" :title="rightRun">{{ rightRun }}</span>
+            </div>
+          </template>
+        </section>
+
+        <section>
           <h2>Federation</h2>
           <div v-for="f in federates" :key="f.name" class="fed" :class="{ hov: hovered === f.name }"
             @mouseenter="hovered = f.name" @mouseleave="hovered = null">
@@ -312,7 +373,8 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
             <div class="fed-size">
               <span class="lbl">size</span>
               <input type="range" :min="AIRCRAFT_SIZE_RANGE.min" :max="AIRCRAFT_SIZE_RANGE.max" step="1" :value="fedUi[f.name].size" @input="onFedSize(f.name, $event)" />
-              <span class="lbl">{{ fedUi[f.name].size }}m</span>
+              <span class="lbl val">{{ fedUi[f.name].size }}m</span>
+              <button class="mini" title="reset to default size" @click="resetFedSize(f.name)">↺</button>
             </div>
           </div>
           <p v-if="!federates.length" class="placeholder">— none —</p>
@@ -324,50 +386,59 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
     <!-- Panel 2: aircraft -->
     <aside class="panel" :class="{ collapsed: fleetCollapsed }">
       <button class="tab" @click="fleetCollapsed = !fleetCollapsed" :title="fleetCollapsed ? 'expand' : 'collapse'">{{ fleetCollapsed ? '›' : '‹' }}</button>
-      <div v-if="!fleetCollapsed" class="panel-body">
-        <h2>Aircraft <span class="count">{{ aircraft.length }}</span></h2>
-        <div class="fleet-controls">
-          <label>Sort
-            <select v-model="sortBy"><option value="federation">Federation</option><option value="id">ID</option></select>
-          </label>
-          <label>Show
-            <select v-model="filterFed">
-              <option value="all">All federations</option>
-              <option v-for="f in federates" :key="f.name" :value="f.name">{{ f.name }}</option>
-            </select>
-          </label>
-          <label class="opt"><input type="checkbox" v-model="syncActive" /> Only active federations</label>
-        </div>
-
-        <div v-for="g in fleetGroups" :key="g.federate || 'all'">
-          <div v-if="g.federate" class="grp"><span class="dot" :style="{ background: fedCss(g.federate) }"></span>{{ g.federate }} <span class="count">{{ g.items.length }}</span></div>
-          <div v-for="a in g.items" :key="a.id" class="ac" @mouseenter="hovered = a.federate" @mouseleave="hovered = null">
-            <div class="ac-head" @click="toggleExpand(a.id)">
-              <span class="caret">{{ acUi[a.id].expanded ? '▾' : '▸' }}</span>
-              <span class="dot" :style="{ background: ownerCss(a.id) }"></span>
-              <span>id {{ a.id }}</span>
-              <span class="sub">· {{ a.federate }}</span>
-              <span v-if="trackedId === a.id" class="tracking" title="camera tracking">◉</span>
-              <span class="mode" :data-mode="acUi[a.id].mode">{{ acUi[a.id].mode }}</span>
-            </div>
-            <div v-if="acUi[a.id].expanded" class="ac-body">
-              <div class="seg">
-                <button :class="{ on: acUi[a.id].mode === 'show' }" @click="setMode(a.id, 'show')">Show</button>
-                <button :class="{ on: acUi[a.id].mode === 'hide' }" @click="setMode(a.id, 'hide')">Hide</button>
-                <button :class="{ on: acUi[a.id].mode === 'highlight' }" @click="setMode(a.id, 'highlight')">Highlight</button>
-              </div>
-              <button class="trackbtn" :class="{ on: trackedId === a.id }" @click="toggleTrack(a.id)">{{ trackedId === a.id ? '◉ Tracking — click to stop' : '◎ Track camera' }}</button>
-              <dl class="stats">
-                <div><dt>owner</dt><dd>{{ liveById[a.id]?.owner || a.federate }}<span v-if="liveById[a.id]?.owner && liveById[a.id].owner !== a.federate" class="handoff"> ⇐ {{ a.federate }}</span></dd></div>
-                <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
-                <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
-                <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>
-                <div title="heading / pitch / roll from the reported quaternion"><dt>h/p/r°</dt><dd>{{ f1(att(a.id)?.heading) }} · {{ f1(att(a.id)?.pitch) }} · {{ f1(att(a.id)?.roll) }}</dd></div>
-              </dl>
-            </div>
+      <div v-if="!fleetCollapsed" class="panel-body scrollable">
+        <div class="fleet-head">
+          <h2>Aircraft <span class="count">{{ aircraft.length }}</span></h2>
+          <div class="track-scroll">
+            <button class="mini" title="track previous" @click="stepTrack(-1)">◀</button>
+            <span class="tlabel">{{ trackedId != null ? '◉ tracking id ' + trackedId : 'Track camera' }}</span>
+            <button class="mini" title="track next" @click="stepTrack(1)">▶</button>
+            <button class="mini" v-if="trackedId != null" title="stop tracking" @click="trackedId = null">✕</button>
+          </div>
+          <div class="fleet-controls">
+            <label>Sort
+              <select v-model="sortBy"><option value="federation">Federation</option><option value="id">ID</option></select>
+            </label>
+            <label>Show
+              <select v-model="filterFed">
+                <option value="all">All federations</option>
+                <option v-for="f in federates" :key="f.name" :value="f.name">{{ f.name }}</option>
+              </select>
+            </label>
+            <label class="opt"><input type="checkbox" v-model="syncActive" /> Only active federations</label>
           </div>
         </div>
-        <p v-if="!fleetGroups.length || !aircraft.length" class="placeholder">— none —</p>
+
+        <div class="fleet-list">
+          <div v-for="g in fleetGroups" :key="g.federate || 'all'">
+            <div v-if="g.federate" class="grp"><span class="dot" :style="{ background: fedCss(g.federate) }"></span>{{ g.federate }} <span class="count">{{ g.items.length }}</span></div>
+            <div v-for="a in g.items" :key="a.id" class="ac" @mouseenter="hovered = a.federate" @mouseleave="hovered = null">
+              <div class="ac-head" @click="toggleExpand(a.id)">
+                <span class="caret">{{ acUi[a.id].expanded ? '▾' : '▸' }}</span>
+                <span class="dot" :style="{ background: ownerCss(a.id) }"></span>
+                <span>id {{ a.id }}</span>
+                <span class="sub">· {{ a.federate }}</span>
+                <button class="track-mini" :class="{ on: trackedId === a.id }" @click.stop="toggleTrack(a.id)" :title="trackedId === a.id ? 'stop tracking' : 'track camera'">{{ trackedId === a.id ? '◉' : '◎' }}</button>
+                <span class="mode" :data-mode="acUi[a.id].mode">{{ acUi[a.id].mode }}</span>
+              </div>
+              <div v-if="acUi[a.id].expanded" class="ac-body">
+                <div class="seg">
+                  <button :class="{ on: acUi[a.id].mode === 'show' }" @click="setMode(a.id, 'show')">Show</button>
+                  <button :class="{ on: acUi[a.id].mode === 'hide' }" @click="setMode(a.id, 'hide')">Hide</button>
+                  <button :class="{ on: acUi[a.id].mode === 'highlight' }" @click="setMode(a.id, 'highlight')">Highlight</button>
+                </div>
+                <dl class="stats">
+                  <div><dt>owner</dt><dd>{{ liveById[a.id]?.owner || a.federate }}<span v-if="liveById[a.id]?.owner && liveById[a.id].owner !== a.federate" class="handoff"> ⇐ {{ a.federate }}</span></dd></div>
+                  <div><dt>pos</dt><dd>{{ f1(liveById[a.id]?.pos[0]) }}, {{ f1(liveById[a.id]?.pos[1]) }}, {{ f1(liveById[a.id]?.pos[2]) }}</dd></div>
+                  <div><dt>vel</dt><dd>{{ f1(liveById[a.id]?.vel[0]) }}, {{ f1(liveById[a.id]?.vel[1]) }}, {{ f1(liveById[a.id]?.vel[2]) }}</dd></div>
+                  <div><dt>speed</dt><dd>{{ f1(speedOf(liveById[a.id]?.vel)) }} m/s</dd></div>
+                  <div title="heading / pitch / roll from the reported quaternion"><dt>h/p/r°</dt><dd>{{ f1(att(a.id)?.heading) }} · {{ f1(att(a.id)?.pitch) }} · {{ f1(att(a.id)?.roll) }}</dd></div>
+                </dl>
+              </div>
+            </div>
+          </div>
+          <p v-if="!fleetGroups.length || !aircraft.length" class="placeholder">— none —</p>
+        </div>
       </div>
       <div v-else class="strip">Aircraft</div>
     </aside>
@@ -381,6 +452,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
           <Viewport :timeline="timeline" :theme="theme" :filter="cell.filter" :aircraft-modes="acModes" :federate-states="fedUi"
             :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :show-world-frame="showWorldFrame" :show-tint="showTint"
             :size-multiplier="sizeMul" :track-id="trackedId"
+            :timeline2="compare ? timeline2 : null" :crossfade="crossfade"
             :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
           <div class="pane-title"><span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}</div>
         </div>
@@ -417,6 +489,16 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 
 .panel { position: relative; border-right: 1px solid var(--border); background: var(--panel-bg); overflow: hidden; min-width: 0; }
 .panel-body { height: 100%; overflow-y: auto; padding: 14px 20px 14px 12px; }
+/* Aircraft panel: pinned header (title + track scroller + filters), scrolling list below. */
+.panel-body.scrollable { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.fleet-head { flex: none; padding: 14px 12px 8px; border-bottom: 1px solid var(--border); background: var(--panel-bg); }
+.fleet-head h2 { margin: 0 0 6px; }
+.fleet-list { flex: 1; overflow-y: auto; padding: 6px 12px 14px; }
+.track-scroll { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
+.track-scroll .tlabel { flex: 1; text-align: center; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-mini { flex: none; margin-left: auto; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); background: var(--card-bg); color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 11px; line-height: 1; }
+.track-mini:hover { background: var(--hover); color: var(--text); }
+.track-mini.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
 .tab { position: absolute; top: 50%; right: 0; transform: translateY(-50%); width: 15px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-right: none; border-radius: 7px 0 0 7px; background: var(--card-bg); color: var(--muted); cursor: pointer; z-index: 3; font-size: 13px; padding: 0; }
 .tab:hover { background: var(--hover); color: var(--text); }
 .strip { writing-mode: vertical-rl; transform: rotate(180deg); height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
@@ -425,6 +507,9 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 .status { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
 .run { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
 .run select { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--card-bg); color: var(--text); font-size: 12px; }
+.xfade { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.xfade input[type='range'] { flex: 1; min-width: 0; accent-color: #6b6a63; }
+.xfade .xlbl { flex: 0 1 auto; max-width: 74px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 16px 0 6px; }
 .panel-body > h2:first-child { margin-top: 0; }
 .count { color: var(--muted); font-weight: 400; }
@@ -462,16 +547,19 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 .fed-name { font-size: 12.5px; font-weight: 600; flex: 1; }
 .chip { border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; width: 24px; height: 23px; cursor: pointer; font-size: 11.5px; line-height: 1; color: var(--muted); padding: 0; }
 .chip.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
-.fed-size { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.fed-size { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .fed-size .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.fed-size input[type='range'] { flex: 1; accent-color: #6b6a63; }
+.fed-size .val { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+.fed-size input[type='range'] { flex: 1; min-width: 0; accent-color: #6b6a63; }
+.mini { flex: none; width: 20px; height: 20px; padding: 0; border: 1px solid var(--line); background: var(--card-bg); color: var(--muted); border-radius: 5px; cursor: pointer; font-size: 11px; line-height: 1; }
+.mini:hover { background: var(--hover); color: var(--text); }
 
 .ac { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--card-bg); overflow: hidden; }
 .ac-head { display: flex; align-items: center; gap: 7px; padding: 7px 9px; cursor: pointer; font-size: 12.5px; }
 .ac-head:hover { background: var(--hover); }
 .caret { color: var(--muted); width: 10px; }
 .ac-head .sub { color: var(--muted); font-size: 12px; }
-.ac-head .mode { margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.ac-head .mode { margin-left: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
 .ac-head .mode[data-mode='hide'] { color: #c07a4b; }
 .ac-head .mode[data-mode='highlight'] { color: #4f9a4f; }
 .ac-body { padding: 8px 9px 10px; border-top: 1px solid var(--border); }

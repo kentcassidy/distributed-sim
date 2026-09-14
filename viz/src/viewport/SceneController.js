@@ -18,8 +18,8 @@ import { DEFAULT_AIRCRAFT_SIZE, THEMES, mix, hexToCss } from '../config.js'
 
 const HIGHLIGHT_SCALE = 1.2
 const MIN_LABEL_PX = 22 // min on-screen spacing between tick units before we thin them out
-const HANDOFF_FX_MS = 3200 // how long the "owner -> owner" handoff diagram floats before it's gone
-const HANDOFF_FX_HOLD = 2800 // ms at full opacity before a quick ~400ms fade-out
+const HANDOFF_FX_MS = 1800 // how long the "owner -> owner" handoff diagram floats before it's gone
+const HANDOFF_FX_HOLD = 1400 // ms at full opacity before a quick ~400ms fade-out
 const PARTITION_TINT = 0.15 // how far a partition's shaded walls shift toward its owner hue
 const HIGHLIGHT_LW = 2 // px line width for the (fat) highlight edges -- ~1px over the default
 
@@ -92,8 +92,14 @@ export class SceneController {
     this.labelGroup = new THREE.Group()
     this.fxGroup = new THREE.Group() // transient CSS2D effects (handoff diagrams)
     this._handoffFx = [] // active [{id, el, obj, start}]
-    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.labelGroup, this.fxGroup)
+    this.fleetGroup2 = new THREE.Group() // COMPARE run's aircraft (overlaid, crossfaded)
+    this.scene.add(this.worldGroup, this.sectorGroup, this.overlayGroup, this.fleetGroup, this.fleetGroup2, this.labelGroup, this.fxGroup)
     this.meshes = new Map()
+    this.meshes2 = new Map() // compare-run aircraft by id
+    this.timeline2 = null // compare run timeline (null = not comparing)
+    this.crossfade = 0.5 // 0 = left/primary only, 1 = right/compare only
+    this._ownerOf2 = new Map()
+    this.fedOf2 = new Map()
     this.worldspace = null
     this._labels = []
 
@@ -261,6 +267,33 @@ export class SceneController {
     if (next != null && changed && this._canTrack(next)) this._zoomToAircraft(next)
   }
 
+  // Overlay a second run's aircraft in this same viewport (or null to stop). Same world/settings;
+  // the two fleets share the space and are blended by the crossfade. Menu/tracking stay on the
+  // PRIMARY run; highlight (by id) covers both because _styleMesh reads aircraftMode by id.
+  setCompare(timeline2) {
+    this._clearGroup(this.fleetGroup2)
+    this.meshes2.clear()
+    this._ownerOf2.clear()
+    this.fedOf2.clear()
+    this.timeline2 = timeline2 || null
+    if (this.timeline2) {
+      for (const ac of this.timeline2.aircraft) {
+        this.fedOf2.set(ac.id, ac.federate)
+        const mesh = makeAircraftMesh(ac.color)
+        this.fleetGroup2.add(mesh)
+        this.meshes2.set(ac.id, mesh)
+      }
+      this._applyResolution()
+    }
+    this._refreshFleet()
+    this._applyTime(playback.t)
+  }
+
+  setCrossfade(x) {
+    this.crossfade = Math.max(0, Math.min(1, Number(x)))
+    this._refreshFleet()
+  }
+
   setSectorsVisible(on) {
     // The global reveal: light every slab's edges + tint its faces (the fused-view equivalent
     // of turning on highlight for all federates). Rebuild, but don't move the camera.
@@ -385,24 +418,54 @@ export class SceneController {
     return !this.viewFilter || this.viewFilter.includes(fed)
   }
 
-  _refreshFleet() {
-    for (const [id, mesh] of this.meshes) this._styleMesh(id, mesh)
+  // Cross-DISSOLVE opacities: the dominant run is the opaque BASE (opacity 1) and the other
+  // blends over it, so two coincident runs read as one fully-opaque object at any fader position
+  // (a symmetric fade would composite to only 1-(1-a)(1-b) = 0.75 at the midpoint). Color still
+  // tracks the fader linearly: contribution is (1-t)/t. depthWrite/renderOrder in _styleMesh put
+  // the base under the overlay.
+  _leftOpacity() {
+    if (!this.timeline2) return 1
+    return this.crossfade <= 0.5 ? 1 : 1 - this.crossfade
+  }
+  _rightOpacity() {
+    if (!this.timeline2) return 0
+    return this.crossfade <= 0.5 ? this.crossfade : 1
   }
 
-  // Visibility/size/COLOR of one aircraft, keyed to its CURRENT owner (so it recolors and moves
-  // between per-federate panes at a handoff). Falls back to the home federate before first sample.
-  _styleMesh(id, mesh) {
-    const owner = this._ownerOf.get(id) || this.fedOf.get(id)
+  _refreshFleet() {
+    const lo = this._leftOpacity()
+    const ro = this._rightOpacity()
+    for (const [id, mesh] of this.meshes) {
+      this._styleMesh(id, mesh, this._ownerOf.get(id) || this.fedOf.get(id), lo, this.timeline)
+    }
+    for (const [id, mesh] of this.meshes2) {
+      this._styleMesh(id, mesh, this._ownerOf2.get(id) || this.fedOf2.get(id), ro, this.timeline2)
+    }
+  }
+
+  // Visibility/size/COLOR/opacity of one aircraft, keyed to its CURRENT owner (so it recolors and
+  // moves between per-federate panes at a handoff). `opacity` is the run crossfade weight; color
+  // comes from `colorTl`'s federate palette. Highlight (per id) applies to BOTH runs' meshes.
+  _styleMesh(id, mesh, owner, opacity, colorTl) {
     const mode = this.aircraftMode.get(id) || 'show'
     const highlight = mode === 'highlight'
-    mesh.visible = this.fedVisible.get(owner) !== false && mode !== 'hide' && this._inFilter(owner)
+    mesh.visible = this.fedVisible.get(owner) !== false && mode !== 'hide' && this._inFilter(owner) && opacity > 0.02
     const size = this.fedSize.get(owner) || DEFAULT_AIRCRAFT_SIZE
     mesh.scale.setScalar((size / 2) * this.sizeMultiplier * (highlight ? HIGHLIGHT_SCALE : 1))
-    const col = this._fedColor(owner)
+    const col = this._fedColorIn(colorTl, owner)
     mesh.material.color.setHex(col)
     mesh.material.emissive.setHex(highlight ? col : 0x000000)
     mesh.material.emissiveIntensity = highlight ? 0.55 : 0
-    if (mesh.userData.outline) mesh.userData.outline.visible = highlight
+    mesh.material.opacity = opacity
+    // The opaque base (opacity ~1) writes depth and draws first; the fractional overlay draws
+    // after with no depth-write, so it blends over the base instead of z-fighting it.
+    mesh.material.depthWrite = opacity > 0.98
+    mesh.renderOrder = opacity > 0.98 ? 0 : 1
+    const o = mesh.userData.outline
+    if (o) {
+      o.visible = highlight
+      o.material.opacity = 0.55 * opacity
+    }
   }
 
   // --- world / partition geometry ---------------------------------------------
@@ -507,11 +570,9 @@ export class SceneController {
   _applyResolution() {
     const s = this.renderer.getSize(this._tmpSize)
     for (const m of this._fatMaterials) m.resolution.set(s.x, s.y)
-    // aircraft selection outlines are fat lines too (created in makeAircraftMesh)
-    for (const mesh of this.meshes.values()) {
-      const o = mesh.userData.outline
-      if (o) o.material.resolution.set(s.x, s.y)
-    }
+    // aircraft selection outlines are fat lines too (created in makeAircraftMesh) -- both fleets
+    for (const mesh of this.meshes.values()) if (mesh.userData.outline) mesh.userData.outline.material.resolution.set(s.x, s.y)
+    for (const mesh of this.meshes2.values()) if (mesh.userData.outline) mesh.userData.outline.material.resolution.set(s.x, s.y)
   }
 
   _frameForMode() {
@@ -521,7 +582,10 @@ export class SceneController {
   }
 
   _fedColor(name) {
-    const f = this.timeline?.federates.find((f) => f.name === name)
+    return this._fedColorIn(this.timeline, name)
+  }
+  _fedColorIn(tl, name) {
+    const f = tl?.federates.find((f) => f.name === name)
     return f ? f.color : 0x333333
   }
 
@@ -535,6 +599,7 @@ export class SceneController {
     this._clearGroup(this.sectorGroup)
     this._clearGroup(this.overlayGroup)
     this._clearGroup(this.fleetGroup)
+    this._clearGroup(this.fleetGroup2)
     for (const l of this._labels) l.el.remove()
     this.labelRenderer.domElement.remove()
     if (this.gizmo) this._disposeScene(this.gizmo.scene)
@@ -755,19 +820,24 @@ export class SceneController {
   }
 
   _applyTime(t) {
-    if (!this.timeline) return
-    for (const s of this.timeline.sample(t)) {
-      const mesh = this.meshes.get(s.id)
+    if (this.timeline) this._applyFleet(t, this.timeline, this.meshes, this._ownerOf, this.fedOf, this._leftOpacity(), true)
+    if (this.timeline2) this._applyFleet(t, this.timeline2, this.meshes2, this._ownerOf2, this.fedOf2, this._rightOpacity(), false)
+  }
+
+  // Position + style one run's fleet at time t. `fx` = fire handoff diagrams (primary run only).
+  _applyFleet(t, timeline, meshes, ownerMap, homeMap, opacity, fx) {
+    for (const s of timeline.sample(t)) {
+      const mesh = meshes.get(s.id)
       if (!mesh) continue
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2])
       mesh.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]).normalize()
       if (s.owner) {
-        const prev = this._ownerOf.get(s.id)
-        // Fire the diagram only on a real forward-playback ownership flip (not scrubbing/seeking).
-        if (prev && prev !== s.owner && playback.playing) this._spawnHandoffFx(s.id, prev, s.owner)
-        this._ownerOf.set(s.id, s.owner)
+        const prev = ownerMap.get(s.id)
+        // Diagram only on a real forward-playback ownership flip (not scrubbing/seeking).
+        if (fx && prev && prev !== s.owner && playback.playing) this._spawnHandoffFx(s.id, prev, s.owner)
+        ownerMap.set(s.id, s.owner)
       }
-      this._styleMesh(s.id, mesh) // owner-driven color/visibility, live with the handoff
+      this._styleMesh(s.id, mesh, ownerMap.get(s.id) || homeMap.get(s.id), opacity, timeline)
     }
   }
 
