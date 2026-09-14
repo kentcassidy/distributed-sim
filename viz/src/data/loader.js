@@ -5,21 +5,34 @@ import { buildTimeline } from './timeline.js'
 // trial). A run holds one controller.ndjson (the run-level meta: world bounds + sectors)
 // plus one file per federate (its truth frames). See vite.config.js for the dev endpoints.
 
-// The names of every run available (folder names, newest layout) -- for the run selector.
-export async function listRuns() {
-  const res = await fetch('/sim_out/index.json')
-  if (!res.ok) throw new Error(`index.json ${res.status}`)
+// Root folders that group runs ("" = runs directly under sim_out/).
+export async function listRoots() {
+  const res = await fetch('/sim_out/roots.json')
+  if (!res.ok) throw new Error(`roots.json ${res.status}`)
+  const { roots } = await res.json()
+  return roots || []
+}
+
+// The runs available within a root folder -- for the run selector.
+export async function listRuns(root = '') {
+  const res = await fetch('/sim_out/runs.json?root=' + encodeURIComponent(root))
+  if (!res.ok) throw new Error(`runs.json ${res.status}`)
   const { runs } = await res.json()
   return runs || []
+}
+
+// Path of a run within its root: "run" at top level, or "root/run" when grouped.
+function runPath(root, run) {
+  return (root ? encodeURIComponent(root) + '/' : '') + encodeURIComponent(run)
 }
 
 // Load ONE run into a Timeline. The file name minus ".ndjson" is the federate name
 // (One.ndjson -> "One") unless the file's meta declares one; the controller file is
 // recognised by its meta and contributes geometry, not tracks (handled in buildTimeline).
-export async function loadRun(run) {
-  const base = '/sim_out/' + encodeURIComponent(run)
+export async function loadRun(root, run) {
+  const base = '/sim_out/' + runPath(root, run)
   const idxRes = await fetch(base + '/index.json')
-  if (!idxRes.ok) throw new Error(`${run}/index.json ${idxRes.status}`)
+  if (!idxRes.ok) throw new Error(`${root}/${run}/index.json ${idxRes.status}`)
   const { files } = await idxRes.json()
   if (!files || files.length === 0) throw new Error(`no .ndjson files in run "${run}"`)
 
@@ -32,11 +45,4 @@ export async function loadRun(run) {
     sources.push({ federate, frames, meta: meta || null, events, file })
   }
   return buildTimeline(sources)
-}
-
-// Convenience: pick the first available run (used for the initial load).
-export async function loadSimOut() {
-  const runs = await listRuns()
-  if (runs.length === 0) throw new Error('no runs in sim_out/')
-  return loadRun(runs[0])
 }

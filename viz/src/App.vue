@@ -4,7 +4,7 @@
 // to panes as PROPS. The left region is two collapsible panels: Controls | Aircraft.
 import { ref, reactive, shallowRef, onMounted, onBeforeUnmount, computed } from 'vue'
 import Viewport from './components/Viewport.vue'
-import { listRuns, loadRun } from './data/loader.js'
+import { listRoots, listRuns, loadRun } from './data/loader.js'
 import { playback, advance } from './viewport/clock.js'
 import { DEFAULT_AIRCRAFT_SIZE, AIRCRAFT_SIZE_RANGE, hexToCss, quatToEulerDeg } from './config.js'
 
@@ -13,9 +13,12 @@ const status = ref('Loading sim_out…')
 const aircraft = ref([])
 const federates = ref([])
 
-// runs (one folder per simulation trial in sim_out/)
+// runs (one folder per simulation trial). Runs may be grouped in a ROOT folder under sim_out/.
+const roots = ref([])
+const currentRoot = ref('')
 const runs = ref([])
 const currentRun = ref(null)
+const rootLabel = (r) => (r === '' ? '(top)' : r)
 
 // compare: overlay a second run, crossfaded against the primary (left) run
 const compare = ref(false)
@@ -30,6 +33,7 @@ const showUnits = ref(true)
 const showSectors = ref(false)
 const showWorldFrame = ref(true)
 const showTint = ref(true)
+const showTransitions = ref(true)
 const isometric = ref(false)
 
 // global marker-size multiplier: slider position in [-1,1] maps exponentially so the center is 1x
@@ -153,7 +157,7 @@ function onKey(e) {
 async function openRun(run) {
   status.value = `Loading ${run}…`
   try {
-    const tl = await loadRun(run)
+    const tl = await loadRun(currentRoot.value, run)
     currentRun.value = run
     // clear state keyed to the previous run
     for (const k of Object.keys(fedUi)) delete fedUi[k]
@@ -183,11 +187,30 @@ async function openRun(run) {
   }
 }
 
-// compare-run loaders
+// switch the root folder: reload its run list, drop compare, open the first run
+async function openRoot(root) {
+  currentRoot.value = root
+  compare.value = false
+  timeline2.value = null
+  rightRun.value = null
+  try {
+    runs.value = await listRuns(root)
+  } catch (e) {
+    runs.value = []
+    console.error(e)
+  }
+  if (runs.value.length) await openRun(runs.value[0])
+  else {
+    timeline.value = null
+    status.value = 'No runs in this folder'
+  }
+}
+
+// compare-run loaders (compare within the current root)
 async function openRightRun(run) {
   rightRun.value = run
   try {
-    timeline2.value = await loadRun(run)
+    timeline2.value = await loadRun(currentRoot.value, run)
   } catch (e) {
     timeline2.value = null
     console.error(e)
@@ -209,7 +232,9 @@ onMounted(async () => {
   window.addEventListener('keydown', onKey)
   rafId = requestAnimationFrame(frame)
   try {
-    runs.value = await listRuns()
+    roots.value = await listRoots()
+    currentRoot.value = roots.value.includes('') ? '' : roots.value[0] || ''
+    runs.value = await listRuns(currentRoot.value)
   } catch (e) {
     status.value = 'Could not list sim_out/: ' + e.message
     console.error(e)
@@ -252,6 +277,9 @@ function recenterFederate(name) {
 // federate + aircraft handlers
 function toggleFedVisible(name) {
   fedUi[name].visible = !fedUi[name].visible
+}
+function setAllFedVisible(v) {
+  for (const f of federates.value) if (fedUi[f.name]) fedUi[f.name].visible = v
 }
 function toggleFedHighlight(name) {
   fedUi[name].highlight = !fedUi[name].highlight
@@ -310,6 +338,11 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
         <h1>DFF Viewer</h1>
         <p class="status">{{ status }}</p>
 
+        <label class="run" v-if="roots.length > 1">Folder
+          <select :value="currentRoot" @change="openRoot($event.target.value)">
+            <option v-for="r in roots" :key="r" :value="r">{{ rootLabel(r) }}</option>
+          </select>
+        </label>
         <label class="run" v-if="runs.length">Run
           <select :value="currentRun" @change="openRun($event.target.value)">
             <option v-for="r in runs" :key="r" :value="r">{{ r }}</option>
@@ -332,6 +365,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
           <label class="opt"><input type="checkbox" :checked="showSectors" @change="showSectors = $event.target.checked" /> Sectors</label>
           <label class="opt"><input type="checkbox" :checked="showTint" @change="showTint = $event.target.checked" /> Tint</label>
           <label class="opt"><input type="checkbox" :checked="showWorldFrame" @change="showWorldFrame = $event.target.checked" /> World frame</label>
+          <label class="opt"><input type="checkbox" :checked="showTransitions" @change="showTransitions = $event.target.checked" /> Transition markers</label>
           <label class="opt"><input type="checkbox" :checked="isometric" @change="isometric = $event.target.checked" /> Isometric</label>
           <label class="opt"><input type="checkbox" v-model="showVectorField" /> Vector field</label>
           <div class="gsize">
@@ -360,6 +394,10 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 
         <section>
           <h2>Federation</h2>
+          <div class="seg small" v-if="federates.length">
+            <button @click="setAllFedVisible(true)">Show all</button>
+            <button @click="setAllFedVisible(false)">Hide all</button>
+          </div>
           <div v-for="f in federates" :key="f.name" class="fed" :class="{ hov: hovered === f.name }"
             @mouseenter="hovered = f.name" @mouseleave="hovered = null">
             <div class="fed-top">
@@ -453,7 +491,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
           <Viewport :timeline="timeline" :theme="theme" :filter="cell.filter" :aircraft-modes="acModes" :federate-states="fedUi"
             :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :show-world-frame="showWorldFrame" :show-tint="showTint"
             :size-multiplier="sizeMul" :track-id="trackedId" :hover-id="hoveredAc"
-            :timeline2="compare ? timeline2 : null" :crossfade="crossfade"
+            :show-transitions="showTransitions" :timeline2="compare ? timeline2 : null" :crossfade="crossfade"
             :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
           <div class="pane-title"><span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}</div>
         </div>

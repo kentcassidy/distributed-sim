@@ -17,6 +17,7 @@ const props = defineProps({
   showSectors: { type: Boolean, default: false },
   showWorldFrame: { type: Boolean, default: true },
   showTint: { type: Boolean, default: true },
+  showTransitions: { type: Boolean, default: true },
   sizeMultiplier: { type: Number, default: 1 },
   trackId: { type: Number, default: null },
   hoverId: { type: Number, default: null },
@@ -44,6 +45,7 @@ function applyAll() {
   scene.setSectorsVisible(props.showSectors)
   scene.setProjection(props.projection)
   scene.setCrossfade(props.crossfade)
+  scene.setTransitionsVisible(props.showTransitions)
   scene.setCompare(props.timeline2)
   scene.setTrack(props.trackId)
   scene.setHover(props.hoverId)
@@ -76,6 +78,7 @@ watch(() => props.showTint, (v) => scene?.setTintVisible(v))
 watch(() => props.sizeMultiplier, (v) => scene?.setSizeMultiplier(v))
 watch(() => props.trackId, (v) => scene?.setTrack(v))
 watch(() => props.hoverId, (v) => scene?.setHover(v))
+watch(() => props.showTransitions, (v) => scene?.setTransitionsVisible(v))
 watch(() => props.timeline2, (v) => scene?.setCompare(v))
 watch(() => props.crossfade, (v) => scene?.setCrossfade(v))
 watch(() => props.projection, (v) => scene?.setProjection(v))

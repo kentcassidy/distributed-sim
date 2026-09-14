@@ -49,7 +49,10 @@ export class SceneController {
     this.sizeMultiplier = 1 // global master multiplier over every federate's marker size
     this.trackId = null // aircraft id the camera is following (null = free)
     this.hoverId = null // aircraft id under the cursor -> temporary highlight
+    this.showTransitions = true // draw the handoff / lost transition markers
     this._lastT = null // last applied playback time (to detect forward advance vs loop/seek)
+    this._lostOf = new Map() // id -> time it went out of bounds (primary run)
+    this._lostOf2 = new Map() // ... compare run
 
     // partition geometry (from the controller meta)
     this.sectors = [] // [{id, owner, min, max}]
@@ -176,6 +179,8 @@ export class SceneController {
     this.meshes.clear()
     this._ownerOf.clear() // stale owners would fire spurious handoff diagrams
     this._clearHandoffFx()
+    this._lostOf.clear()
+    for (const ev of timeline.events || []) if (ev.event === 'out_of_bounds') this._lostOf.set(ev.id, ev.t)
 
     // partition geometry: keep the sectors and index them by owner
     this.sectors = timeline.sectors || []
@@ -283,6 +288,8 @@ export class SceneController {
     this.fedOf2.clear()
     this.timeline2 = timeline2 || null
     this.sectors2 = this.timeline2 ? this.timeline2.sectors || [] : []
+    this._lostOf2.clear()
+    for (const ev of (this.timeline2 && this.timeline2.events) || []) if (ev.event === 'out_of_bounds') this._lostOf2.set(ev.id, ev.t)
     if (this.timeline2) {
       for (const ac of this.timeline2.aircraft) {
         this.fedOf2.set(ac.id, ac.federate)
@@ -307,6 +314,11 @@ export class SceneController {
     if (next === this.hoverId) return
     this.hoverId = next
     this._refreshFleet() // hovered aircraft gets a temporary highlight
+  }
+
+  setTransitionsVisible(on) {
+    this.showTransitions = on
+    if (!on) this._clearHandoffFx()
   }
 
   setSectorsVisible(on) {
@@ -472,21 +484,25 @@ export class SceneController {
     return this.crossfade <= 0.5 ? this.crossfade : 1
   }
 
+  _isLost(id, lostMap) {
+    return lostMap.has(id) && this._lastT != null && this._lastT >= lostMap.get(id)
+  }
+
   _refreshFleet() {
     const lo = this._leftOpacity()
     const ro = this._rightOpacity()
     for (const [id, mesh] of this.meshes) {
-      this._styleMesh(id, mesh, this._ownerOf.get(id) || this.fedOf.get(id), lo, this.timeline)
+      this._styleMesh(id, mesh, this._ownerOf.get(id) || this.fedOf.get(id), lo, this.timeline, this._isLost(id, this._lostOf))
     }
     for (const [id, mesh] of this.meshes2) {
-      this._styleMesh(id, mesh, this._ownerOf2.get(id) || this.fedOf2.get(id), ro, this.timeline2)
+      this._styleMesh(id, mesh, this._ownerOf2.get(id) || this.fedOf2.get(id), ro, this.timeline2, this._isLost(id, this._lostOf2))
     }
   }
 
   // Visibility/size/COLOR/opacity of one aircraft, keyed to its CURRENT owner (so it recolors and
   // moves between per-federate panes at a handoff). `opacity` is the run crossfade weight; color
   // comes from `colorTl`'s federate palette. Highlight (per id) applies to BOTH runs' meshes.
-  _styleMesh(id, mesh, owner, opacity, colorTl) {
+  _styleMesh(id, mesh, owner, opacity, colorTl, lost) {
     const mode = this.aircraftMode.get(id) || 'show'
     const highlight = mode === 'highlight' || id === this.hoverId
     mesh.visible = this.fedVisible.get(owner) !== false && mode !== 'hide' && this._inFilter(owner) && opacity > 0.02
@@ -496,11 +512,14 @@ export class SceneController {
     mesh.material.color.setHex(col)
     mesh.material.emissive.setHex(highlight ? col : 0x000000)
     mesh.material.emissiveIntensity = highlight ? 0.55 : 0
-    mesh.material.opacity = opacity
+    // LOST (out of bounds): sit at the last spot as a wireframe ghost, its color, semi-translucent.
+    mesh.material.wireframe = !!lost
+    const eff = lost ? opacity * 0.4 : opacity
+    mesh.material.opacity = eff
     // The opaque base (opacity ~1) writes depth and draws first; the fractional overlay draws
     // after with no depth-write, so it blends over the base instead of z-fighting it.
-    mesh.material.depthWrite = opacity > 0.98
-    mesh.renderOrder = opacity > 0.98 ? 0 : 1
+    mesh.material.depthWrite = eff > 0.98
+    mesh.renderOrder = eff > 0.98 ? 0 : 1
     const o = mesh.userData.outline
     if (o) {
       o.visible = highlight
@@ -889,13 +908,13 @@ export class SceneController {
   _applyTime(t) {
     const last = this._lastT
     this._lastT = t
-    if (this.timeline) this._applyFleet(t, this.timeline, this.meshes, this._ownerOf, this.fedOf, this._leftOpacity())
-    if (this.timeline2) this._applyFleet(t, this.timeline2, this.meshes2, this._ownerOf2, this.fedOf2, this._rightOpacity())
+    if (this.timeline) this._applyFleet(t, this.timeline, this.meshes, this._ownerOf, this.fedOf, this._leftOpacity(), this._lostOf)
+    if (this.timeline2) this._applyFleet(t, this.timeline2, this.meshes2, this._ownerOf2, this.fedOf2, this._rightOpacity(), this._lostOf2)
 
     // Fire departure markers from the PRIMARY run's explicit event log as the playhead crosses
     // them -- forward playback only (so a loop-wrap or a scrub/seek fires nothing), and only for
     // aircraft actually VISIBLE in THIS viewport (styled just above).
-    if (this.timeline && playback.playing && last != null && t > last && t - last < 1.0) {
+    if (this.showTransitions && this.timeline && playback.playing && last != null && t > last && t - last < 1.0) {
       for (const ev of this.timeline.eventsBetween(last, t)) {
         const mesh = this.meshes.get(ev.id)
         if (mesh && mesh.visible) this._spawnEventFx(ev)
@@ -904,14 +923,15 @@ export class SceneController {
   }
 
   // Position + style one run's fleet at time t (owner-driven color/visibility/opacity).
-  _applyFleet(t, timeline, meshes, ownerMap, homeMap, opacity) {
+  _applyFleet(t, timeline, meshes, ownerMap, homeMap, opacity, lostMap) {
     for (const s of timeline.sample(t)) {
       const mesh = meshes.get(s.id)
       if (!mesh) continue
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2])
       mesh.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]).normalize()
       if (s.owner) ownerMap.set(s.id, s.owner)
-      this._styleMesh(s.id, mesh, ownerMap.get(s.id) || homeMap.get(s.id), opacity, timeline)
+      const lost = lostMap.has(s.id) && t >= lostMap.get(s.id)
+      this._styleMesh(s.id, mesh, ownerMap.get(s.id) || homeMap.get(s.id), opacity, timeline, lost)
     }
   }
 
