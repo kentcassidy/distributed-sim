@@ -52,6 +52,7 @@ const worldCollapsed = ref(false)
 const fleetCollapsed = ref(false)
 const sortBy = ref('federation') // 'federation' | 'id'
 const filterFed = ref('all')
+const hoveredAc = ref(null) // aircraft id under the cursor -> temporary highlight in the scene
 const syncActive = ref(false) // only list aircraft whose federate is shown
 
 // recenter (nonce props)
@@ -412,7 +413,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
         <div class="fleet-list">
           <div v-for="g in fleetGroups" :key="g.federate || 'all'">
             <div v-if="g.federate" class="grp"><span class="dot" :style="{ background: fedCss(g.federate) }"></span>{{ g.federate }} <span class="count">{{ g.items.length }}</span></div>
-            <div v-for="a in g.items" :key="a.id" class="ac" @mouseenter="hovered = a.federate" @mouseleave="hovered = null">
+            <div v-for="a in g.items" :key="a.id" class="ac" @mouseenter="hovered = a.federate; hoveredAc = a.id" @mouseleave="hovered = null; hoveredAc = null">
               <div class="ac-head" @click="toggleExpand(a.id)">
                 <span class="caret">{{ acUi[a.id].expanded ? '▾' : '▸' }}</span>
                 <span class="dot" :style="{ background: ownerCss(a.id) }"></span>
@@ -451,7 +452,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
           @mouseenter="hovered = cell.federate" @mouseleave="hovered = null">
           <Viewport :timeline="timeline" :theme="theme" :filter="cell.filter" :aircraft-modes="acModes" :federate-states="fedUi"
             :show-gizmo="showGizmo" :show-units="showUnits" :show-sectors="showSectors" :show-world-frame="showWorldFrame" :show-tint="showTint"
-            :size-multiplier="sizeMul" :track-id="trackedId"
+            :size-multiplier="sizeMul" :track-id="trackedId" :hover-id="hoveredAc"
             :timeline2="compare ? timeline2 : null" :crossfade="crossfade"
             :projection="projection" :recenter-world-nonce="recenterWorldNonce" :recenter-fed="recenterFed" />
           <div class="pane-title"><span class="dot" v-if="cell.css" :style="{ background: cell.css }"></span>{{ cell.label }}</div>

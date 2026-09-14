@@ -89,6 +89,12 @@ export function buildTimeline(sources) {
     }
   }
 
+  // departure events (handoff / out_of_bounds), keyed by time -- explicit markers the viewer
+  // fires as the playhead crosses them (rather than inferring handoffs from owner changes).
+  const events = []
+  for (const src of frameSources) for (const ev of src.events || []) events.push(ev)
+  events.sort((a, b) => a.t - b.t)
+
   const federates = federateNames.map((name, i) => ({ name, color: federateColor(i) }))
   const colorOf = new Map(federates.map((f) => [f.name, f.color]))
   const aircraft = [...tracks.values()].map((tr) => ({
@@ -98,11 +104,11 @@ export function buildTimeline(sources) {
     color: colorOf.get(tr.federate),
   }))
 
-  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max }, dt, sectors, world })
+  return new Timeline({ tracks, aircraft, federates, tMin, tMax, bounds: { min, max }, dt, sectors, world, events })
 }
 
 export class Timeline {
-  constructor({ tracks, aircraft, federates, tMin, tMax, bounds, dt, sectors, world }) {
+  constructor({ tracks, aircraft, federates, tMin, tMax, bounds, dt, sectors, world, events }) {
     this.tracks = tracks
     this.aircraft = aircraft
     this.federates = federates
@@ -112,10 +118,21 @@ export class Timeline {
     this.dt = dt ?? null
     this.sectors = sectors || [] // [{id, owner, min, max}]
     this.world = world || null // authoritative world AABB from the controller, or null
+    this.events = events || [] // sorted departure events {t, event, id, from, to?, pos}
   }
 
   get duration() {
     return Math.max(0, this.tMax - this.tMin)
+  }
+
+  // Departure events with a < t <= b (for firing transition markers on forward playback).
+  eventsBetween(a, b) {
+    const out = []
+    for (const ev of this.events) {
+      if (ev.t > a && ev.t <= b) out.push(ev)
+      else if (ev.t > b) break // sorted
+    }
+    return out
   }
 
   // State of every aircraft at time t (linear pos, normalized-lerp quat).

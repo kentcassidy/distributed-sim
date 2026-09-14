@@ -27,9 +27,9 @@ export async function loadRun(run) {
   for (const file of files) {
     const res = await fetch(base + '/' + encodeURIComponent(file))
     if (!res.ok) throw new Error(`${file} ${res.status}`)
-    const { meta, frames } = parseNdjson(await res.text())
+    const { meta, frames, events } = parseNdjson(await res.text())
     const federate = (meta && meta.federate) || file.replace(/\.ndjson$/i, '')
-    sources.push({ federate, frames, meta: meta || null, file })
+    sources.push({ federate, frames, meta: meta || null, events, file })
   }
   return buildTimeline(sources)
 }

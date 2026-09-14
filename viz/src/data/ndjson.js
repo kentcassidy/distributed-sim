@@ -8,6 +8,7 @@
 export function parseNdjson(text) {
   let meta = null
   const frames = []
+  const events = [] // departure lines: {t, event:"handoff"|"out_of_bounds", id, from, to?, pos}
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim()
     if (!line) continue
@@ -18,7 +19,8 @@ export function parseNdjson(text) {
       continue // skip a partial/corrupt line
     }
     if (obj.meta) meta = obj.meta
+    else if (obj.event !== undefined) events.push(obj)
     else if (obj.t !== undefined) frames.push(obj)
   }
-  return { meta, frames }
+  return { meta, frames, events }
 }

@@ -48,6 +48,8 @@ export class SceneController {
     this.showUnits = true
     this.sizeMultiplier = 1 // global master multiplier over every federate's marker size
     this.trackId = null // aircraft id the camera is following (null = free)
+    this.hoverId = null // aircraft id under the cursor -> temporary highlight
+    this._lastT = null // last applied playback time (to detect forward advance vs loop/seek)
 
     // partition geometry (from the controller meta)
     this.sectors = [] // [{id, owner, min, max}]
@@ -300,6 +302,13 @@ export class SceneController {
     this._applySectorOpacity()
   }
 
+  setHover(id) {
+    const next = id == null ? null : Number(id)
+    if (next === this.hoverId) return
+    this.hoverId = next
+    this._refreshFleet() // hovered aircraft gets a temporary highlight
+  }
+
   setSectorsVisible(on) {
     // The global reveal: light every slab's edges + tint its faces (the fused-view equivalent
     // of turning on highlight for all federates). Rebuild, but don't move the camera.
@@ -371,25 +380,50 @@ export class SceneController {
 
   // --- handoff diagram (transient "owner -> owner" marker above the aircraft) --------------
 
-  _spawnHandoffFx(id, from, to) {
+  _spawnEventFx(ev) {
+    if (ev.event === 'handoff') this._spawnHandoffFx(ev.id, ev.from, ev.to)
+    else if (ev.event === 'out_of_bounds') this._spawnLostFx(ev.id, ev.from)
+  }
+
+  _fxShell() {
     const el = document.createElement('div')
     el.style.cssText =
       'display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:11px;' +
       'background:rgba(20,20,22,0.6);pointer-events:none;white-space:nowrap;'
-    const dot = (name) => {
-      const s = document.createElement('span')
-      s.style.cssText = `width:11px;height:11px;border-radius:50%;display:inline-block;background:${hexToCss(this._fedColor(name))};`
-      return s
-    }
-    const arrow = document.createElement('span')
-    arrow.textContent = '→'
-    arrow.style.cssText = 'color:#e8e8e8;font-size:13px;line-height:1;font-weight:600;'
-    el.appendChild(dot(from))
-    el.appendChild(arrow)
-    el.appendChild(dot(to))
+    return el
+  }
+  _fxDot(name) {
+    const s = document.createElement('span')
+    s.style.cssText = `width:11px;height:11px;border-radius:50%;display:inline-block;background:${hexToCss(this._fedColor(name))};`
+    return s
+  }
+  _pushFx(id, el) {
     const obj = new CSS2DObject(el)
     this.fxGroup.add(obj)
     this._handoffFx.push({ id, el, obj, start: performance.now() })
+  }
+
+  // handoff: [from-color circle] -> [to-color circle]
+  _spawnHandoffFx(id, from, to) {
+    const el = this._fxShell()
+    const arrow = document.createElement('span')
+    arrow.textContent = '→'
+    arrow.style.cssText = 'color:#e8e8e8;font-size:13px;line-height:1;font-weight:600;'
+    el.appendChild(this._fxDot(from))
+    el.appendChild(arrow)
+    el.appendChild(this._fxDot(to))
+    this._pushFx(id, el)
+  }
+
+  // out of bounds ("lost in the void"): [from-color circle] -> lost
+  _spawnLostFx(id, from) {
+    const el = this._fxShell()
+    const lost = document.createElement('span')
+    lost.textContent = '→ lost'
+    lost.style.cssText = 'color:#e8695a;font-size:11px;line-height:1;font-weight:600;'
+    el.appendChild(this._fxDot(from))
+    el.appendChild(lost)
+    this._pushFx(id, el)
   }
 
   _updateHandoffFx(now) {
@@ -454,7 +488,7 @@ export class SceneController {
   // comes from `colorTl`'s federate palette. Highlight (per id) applies to BOTH runs' meshes.
   _styleMesh(id, mesh, owner, opacity, colorTl) {
     const mode = this.aircraftMode.get(id) || 'show'
-    const highlight = mode === 'highlight'
+    const highlight = mode === 'highlight' || id === this.hoverId
     mesh.visible = this.fedVisible.get(owner) !== false && mode !== 'hide' && this._inFilter(owner) && opacity > 0.02
     const size = this.fedSize.get(owner) || DEFAULT_AIRCRAFT_SIZE
     mesh.scale.setScalar((size / 2) * this.sizeMultiplier * (highlight ? HIGHLIGHT_SCALE : 1))
@@ -523,18 +557,18 @@ export class SceneController {
       this.worldspace = buildWorldspace(slab, this.palette, { axes: false, wallColor, edgeColor: owner })
       this.worldGroup.add(this.worldspace.group)
       this._labelBounds = slab
-      if (this.showSectors) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
+      if (this.showSectors || this.showTint) for (const s of this.sectors) if (s.owner !== sole) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
     } else {
       // standard/fused view: the whole world as the gridded, shaded room
       this.worldspace = buildWorldspace(this.world, this.palette, { axes: true })
       this.worldGroup.add(this.worldspace.group)
       this._labelBounds = this.world
-      if (this.showSectors) for (const s of this.sectors) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
+      if (this.showSectors || this.showTint) for (const s of this.sectors) this._addSectorReveal(s, this.sectorGroup, this.timeline, this._sectorFx)
     }
 
     // COMPARE: the second run's partition tint/edges, crossfaded against the primary's. Same
     // world box (shared), so only the run-specific slabs overlay + fade.
-    if (this.timeline2 && this.showSectors) {
+    if (this.timeline2 && (this.showSectors || this.showTint)) {
       for (const s of this.sectors2) this._addSectorReveal(s, this.sectorGroup2, this.timeline2, this._sectorFx2)
     }
 
@@ -544,14 +578,17 @@ export class SceneController {
     this._applySectorOpacity()
   }
 
-  // A revealed slab: fat owner-colored edges + a faint owner-tinted volume ("walls"). Added to
-  // `group` and its materials tracked in `fxList` so the run crossfade can scale their opacity.
+  // A revealed slab. "Sectors" toggles the owner-colored EDGES; "Tint" toggles the faint
+  // owner-tinted face fill ("walls") -- independent, so Tint alone works in the fused view too.
+  // Materials are tracked in `fxList` so the run crossfade can scale their opacity.
   _addSectorReveal(sec, group, colorTl, fxList) {
     const color = this._fedColorIn(colorTl, sec.owner)
-    const { seg, mat } = fatBox(sec, color, HIGHLIGHT_LW, 0.8)
-    group.add(seg)
-    this._fatMaterials.push(mat)
-    fxList.push({ mat, base: 0.8 })
+    if (this.showSectors) {
+      const { seg, mat } = fatBox(sec, color, HIGHLIGHT_LW, 0.8)
+      group.add(seg)
+      this._fatMaterials.push(mat)
+      fxList.push({ mat, base: 0.8 })
+    }
     if (this.showTint) {
       const tint = faceTint(sec, color, 0.1)
       group.add(tint)
@@ -850,23 +887,30 @@ export class SceneController {
   }
 
   _applyTime(t) {
-    if (this.timeline) this._applyFleet(t, this.timeline, this.meshes, this._ownerOf, this.fedOf, this._leftOpacity(), true)
-    if (this.timeline2) this._applyFleet(t, this.timeline2, this.meshes2, this._ownerOf2, this.fedOf2, this._rightOpacity(), false)
+    const last = this._lastT
+    this._lastT = t
+    if (this.timeline) this._applyFleet(t, this.timeline, this.meshes, this._ownerOf, this.fedOf, this._leftOpacity())
+    if (this.timeline2) this._applyFleet(t, this.timeline2, this.meshes2, this._ownerOf2, this.fedOf2, this._rightOpacity())
+
+    // Fire departure markers from the PRIMARY run's explicit event log as the playhead crosses
+    // them -- forward playback only (so a loop-wrap or a scrub/seek fires nothing), and only for
+    // aircraft actually VISIBLE in THIS viewport (styled just above).
+    if (this.timeline && playback.playing && last != null && t > last && t - last < 1.0) {
+      for (const ev of this.timeline.eventsBetween(last, t)) {
+        const mesh = this.meshes.get(ev.id)
+        if (mesh && mesh.visible) this._spawnEventFx(ev)
+      }
+    }
   }
 
-  // Position + style one run's fleet at time t. `fx` = fire handoff diagrams (primary run only).
-  _applyFleet(t, timeline, meshes, ownerMap, homeMap, opacity, fx) {
+  // Position + style one run's fleet at time t (owner-driven color/visibility/opacity).
+  _applyFleet(t, timeline, meshes, ownerMap, homeMap, opacity) {
     for (const s of timeline.sample(t)) {
       const mesh = meshes.get(s.id)
       if (!mesh) continue
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2])
       mesh.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]).normalize()
-      if (s.owner) {
-        const prev = ownerMap.get(s.id)
-        // Diagram only on a real forward-playback ownership flip (not scrubbing/seeking).
-        if (fx && prev && prev !== s.owner && playback.playing) this._spawnHandoffFx(s.id, prev, s.owner)
-        ownerMap.set(s.id, s.owner)
-      }
+      if (s.owner) ownerMap.set(s.id, s.owner)
       this._styleMesh(s.id, mesh, ownerMap.get(s.id) || homeMap.get(s.id), opacity, timeline)
     }
   }
