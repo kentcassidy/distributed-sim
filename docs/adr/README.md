@@ -24,11 +24,14 @@ ADR supersedes it, and the superseded record is marked accordingly.
 | [0012](0012-container-base-image-and-toolchain.md) | Ubuntu 22.04 + GCC 11 base image and toolchain | Accepted | — |
 | [0013](0013-config-driven-entity-partition-model.md) | Config-driven entity/partition model — N aircraft over K containers (amended by 0015) | Accepted | — |
 | [0014](0014-portico-old-cxx-abi.md) | Build against Portico's old C++ ABI; gnu++14 for RTI-facing code | Accepted | — |
-| [0015](0015-space-partitioned-placement-and-controller.md) | Space-partitioned placement with a controller federate | Accepted | — |
+| [0015](0015-space-partitioned-placement-and-controller.md) | Space-partitioned placement with a controller federate (refined by 0020, 0021) | Accepted | — |
 | [0016](0016-core-object-model.md) | Core object model — composition-first, shallow interfaces | Accepted | — |
 | [0017](0017-fom-format-fed.md) | Author the FOM in HLA 1.3 (.fed) format, not 1516e XML | Accepted | — |
 | [0018](0018-ndjson-logging-and-viewer.md) | NDJSON logging seam + browser viewer (refines 0003) | Accepted | — |
 | [0019](0019-constructive-partition-invariance.md) | Constructive bit-exact partition invariance is the V&V spine; Live degradation separate | Accepted | — |
+| [0020](0020-peer-to-peer-ownership-handoff.md) | Peer-to-peer ownership handoff via a dedicated interaction (refines 0015) | Accepted | — |
+| [0021](0021-recursive-coordinate-bisection-partition.md) | Partition the world by Recursive Coordinate Bisection (refines 0015) | Accepted | — |
+| [0022](0022-controller-owned-run-window.md) | Controller owns the run window; constructive core needs no HLA time management | Accepted | — |
 
 **Status key.** *Proposed* — the decision is recorded but not yet locked; it
 moves to *Accepted* when resolved at or before the noted milestone. *Accepted* —

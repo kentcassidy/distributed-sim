@@ -29,6 +29,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>   // std::swap
 
 int main(int argc, char** argv) {
     // --- defaults ---

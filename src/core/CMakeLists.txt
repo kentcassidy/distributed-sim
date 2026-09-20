@@ -6,6 +6,7 @@ add_library(dff_core STATIC
     dff_core.cpp
     Aircraft.cpp
     LinearLongitudinal.cpp
+    WeathervaneFlight.cpp
     Integrator.cpp
     Collision.cpp
     World.cpp

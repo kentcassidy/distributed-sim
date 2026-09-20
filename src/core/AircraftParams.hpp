@@ -41,4 +41,17 @@ struct AircraftParams {
         double Zu = -0.20, Zw = -0.50, Zq = 0.0;
         double Mu =  0.00, Mw = -0.02, Mq = -0.50, Mw_dot = 0.0;
     } lon;
+
+    // Attitude-model filler gains (WeathervaneFlight). Angular-acceleration coefficients
+    // (inertia folded in), also ARBITRARY-but-stable. kAlign = weathervane restoring stiffness
+    // that turns the nose toward the velocity vector; the damping gains oppose rotation
+    // (always stabilizing); kDihedral banks into the turn during the alignment transient.
+    // Slightly under critically damped (damping < 2*sqrt(kAlign)) for a visible settle + bank.
+    struct AeroFiller {
+        double kAlign     = 4.0;   // nose -> velocity restoring (pitch + yaw)
+        double kPitchDamp = 3.0;   // pitch-rate damping
+        double kYawDamp   = 3.0;   // yaw-rate damping
+        double kDihedral  = 1.5;   // roll into the turn (from yaw error)
+        double kRollDamp  = 3.0;   // roll-rate damping
+    } aero;
 };

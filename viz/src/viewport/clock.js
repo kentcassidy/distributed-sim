@@ -1,7 +1,7 @@
 // One shared playback clock for ALL viewports, so every pane renders the exact same
 // sim time (synced panes). App advances it once per frame; each SceneController reads
 // `playback.t` in its own render loop.
-export const playback = { t: 0, playing: false, speed: 1, duration: 0, _last: 0 }
+export const playback = { t: 0, playing: false, speed: 1, duration: 0, loop: true, _last: 0 }
 
 export function advance(now) {
   if (!playback._last) playback._last = now
@@ -9,6 +9,12 @@ export function advance(now) {
   playback._last = now
   if (playback.playing && playback.duration > 0) {
     playback.t += dt * playback.speed
-    if (playback.t >= playback.duration) playback.t = 0 // loop the replay
+    if (playback.t >= playback.duration) {
+      if (playback.loop) playback.t = 0 // autoreplay
+      else {
+        playback.t = playback.duration // stop at the end
+        playback.playing = false
+      }
+    }
   }
 }

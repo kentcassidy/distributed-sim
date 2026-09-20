@@ -69,6 +69,7 @@ const currentT = ref(0)
 const duration = ref(0)
 const speed = ref(1)
 const SPEEDS = [0.25, 0.5, 1, 2, 4]
+const loop = ref(true) // autoreplay
 
 const fedUi = reactive({}) // name -> {visible, highlight, halo, size}
 const acUi = reactive({}) // id -> {expanded, mode}
@@ -133,6 +134,7 @@ let rafId = 0
 function frame(now) {
   advance(now)
   currentT.value = playback.t
+  if (playing.value !== playback.playing) playing.value = playback.playing // clock may stop at end
   rafId = requestAnimationFrame(frame)
 }
 function onKey(e) {
@@ -176,6 +178,7 @@ async function openRun(run) {
     playback.duration = tl.duration
     playback.t = 0
     playback.speed = speed.value
+    playback.loop = loop.value
     playback.playing = true
     duration.value = tl.duration
     currentT.value = 0
@@ -250,8 +253,14 @@ onBeforeUnmount(() => {
 
 // playback
 function togglePlay() {
+  // if stopped at the end (autoreplay off), restart from the top
+  if (!playback.playing && playback.duration > 0 && currentT.value >= playback.duration - 1e-6) seek(0)
   playback.playing = !playback.playing
   playing.value = playback.playing
+}
+function toggleLoop() {
+  loop.value = !loop.value
+  playback.loop = loop.value
 }
 function seek(t) {
   playback.t = Math.max(0, Math.min(t, playback.duration || 0))
@@ -278,8 +287,8 @@ function recenterFederate(name) {
 function toggleFedVisible(name) {
   fedUi[name].visible = !fedUi[name].visible
 }
-function setAllFedVisible(v) {
-  for (const f of federates.value) if (fedUi[f.name]) fedUi[f.name].visible = v
+function setAllSelected(v) {
+  for (const f of federates.value) selected[f.name] = v
 }
 function toggleFedHighlight(name) {
   fedUi[name].highlight = !fedUi[name].highlight
@@ -394,9 +403,9 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 
         <section>
           <h2>Federation</h2>
-          <div class="seg small" v-if="federates.length">
-            <button @click="setAllFedVisible(true)">Show all</button>
-            <button @click="setAllFedVisible(false)">Hide all</button>
+          <div class="seg small" v-if="federates.length && scope === 'selected'">
+            <button @click="setAllSelected(true)">Select all</button>
+            <button @click="setAllSelected(false)">Deselect all</button>
           </div>
           <div v-for="f in federates" :key="f.name" class="fed" :class="{ hov: hovered === f.name }"
             @mouseenter="hovered = f.name" @mouseleave="hovered = null">
@@ -503,6 +512,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
         <select class="speed" :value="speed" @change="setSpeed(Number($event.target.value))">
           <option v-for="s in SPEEDS" :key="s" :value="s">{{ s }}×</option>
         </select>
+        <button class="btn" :class="{ on: loop }" @click="toggleLoop" :title="loop ? 'autoreplay on' : 'autoreplay off'">🔁</button>
       </div>
     </main>
   </div>
@@ -616,6 +626,7 @@ const ownerCss = (id) => fedCss(liveById.value[id]?.owner) || aircraft.value.fin
 .timeline { border-top: 1px solid var(--border); padding: 10px 16px; background: var(--panel-bg); display: flex; align-items: center; gap: 12px; }
 .btn { border: 1px solid var(--line); background: var(--card-bg); border-radius: 6px; width: 34px; height: 30px; cursor: pointer; font-size: 12px; color: var(--text); }
 .btn:hover { background: var(--hover); }
+.btn.on { background: var(--chip-on); border-color: var(--chip-on-border); color: var(--text); }
 .scrub { flex: 1; accent-color: #6b6a63; }
 .time { font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); min-width: 92px; text-align: right; }
 .speed { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--card-bg); color: var(--text); font-size: 12.5px; }

@@ -246,6 +246,21 @@ td code{font-size:11.5px}
     Collision stays the immediate post-MVP feature (ADR-0007). Session journal in <code>docs/devlog/</code>.
   </div>
 
+  <div class="note ok">
+    <span class="lbl">Progress &mdash; Sep 13: MVP result verified; migration + 3D partition landed</span>
+    <strong>Constructive partition invariance is VERIFIED</strong> &mdash; K=1 vs K=2/3 bit-exact
+    (200/200 points), and falsifiable (deleting one truth line correctly flips it to FAIL).
+    <strong>Peer-to-peer migration is done and verified</strong>: bit-exact handoff with ownership
+    flipping at the seam, and the controller LEAVES the runtime loop once jobs are assigned
+    (ADR-0020). The partition is now <strong>Recursive Coordinate Bisection</strong> &mdash; 3D
+    cells that lean cubic, with unequal-K ratios (ADR-0021); the controller owns the run window
+    (ADR-0022); and a <strong>seeded scenario generator</strong> drives many aircraft crossing
+    cell seams in every direction, some flying out of bounds (&ldquo;lost in the void&rdquo;).
+    Physics remains <strong>deterministic longitudinal filler</strong> &mdash; lateral / 6-DOF
+    dynamics and the wind vector field are the remaining stretch; the nose-follows-velocity fix
+    waits on real 6-DOF. <strong>Next:</strong> presentation packaging.
+  </div>
+
   <script>(function(){
     var V = [
       { id:"v1", label:"Original", when:"Sep 1", day:1,
@@ -326,7 +341,7 @@ td code{font-size:11.5px}
 
     // CURRENT actual project status, by phase name. Update as reality lands;
     // the ghost on every PREVIOUS timeline is derived from this single source.
-    var STATUS = { done:["Bootstrap","RTI handshake","Flight model"], active:["Partition by config"] };
+    var STATUS = { done:["Bootstrap","RTI handshake","Flight model","Partition by config","Constructive invariance","Migration + viewer"], active:["Package"] };
     function statusOf(name){
       if(STATUS.done.indexOf(name)>=0) return 'done';
       if(STATUS.active.indexOf(name)>=0) return 'active';

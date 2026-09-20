@@ -10,7 +10,7 @@
 #include "AircraftFedAmb.hpp"
 #include "Encoding.hpp"
 #include "../core/World.hpp"
-#include "../core/LinearLongitudinal.hpp"
+#include "../core/WeathervaneFlight.hpp"
 
 using namespace rti1516e;
 using namespace std;
@@ -77,7 +77,7 @@ private:
 
     double               dt_ = 0.1;
     int                  numSteps_ = 100;   // run length, set from the controller's StartRun
-    LinearLongitudinal   model_;   // declared BEFORE world_ so it outlives borrowing aircraft
+    WeathervaneFlight    model_;   // declared BEFORE world_ so it outlives borrowing aircraft
     World                world_;
     ofstream             log_;     // NDJSON frames for the browser viewer
     wstring              federateName_;

@@ -1,0 +1,114 @@
+DEVLOG — 2026-09-13 (Claude-generated) — Peer-to-peer migration, RCB partitioning
+==================================================================================
+
+Continues 9-13-26.txt. That entry ended with the constructive invariance MVP VERIFIED and
+the migration increment PLANNED (M4/M5, then routed through the controller). This session
+reframed migration to a PEER-TO-PEER model, implemented and verified it, then pushed into
+stretch: config-driven run length, 3D partitioning, a seeded scenario generator, and richer
+NDJSON. New ADRs: 0020 (peer handoff), 0021 (RCB partition), 0022 (controller-owned run
+window). No physics fidelity added yet (still deterministic longitudinal filler).
+
+WHAT WAS BUILT (in order)
+-------------------------
+1. LAYER 1 -- the controller owns the run length. `StartRun` gained a `NumSteps` parameter;
+   the federate's hardcoded `STEPS=100` is gone -- it runs the window the controller sets.
+   Small, but it is the pivot from "federate is a fixed batch" to "federate is a responsive
+   job worker that serves until the controller says the sim is done." VERIFIED: invariance
+   unchanged (both default 100).
+
+2. PEER-TO-PEER MIGRATION (ADR-0020) -- reframed with the user away from the planned
+   "controller decides" model. After the controller hands out the initial jobs it LEAVES the
+   runtime loop; federates coordinate handoffs directly:
+   - New FOM interaction `Handoff{TargetFederate, EntityId, Position, Velocity, Orientation,
+     AngularV, Step}`, fed -> fed. Kept SEPARATE from AssignEntity on purpose: AssignEntity =
+     ownership CREATED centrally at bootstrap; Handoff = ownership MOVED between peers at
+     runtime. The controller neither publishes nor subscribes Handoff, so the wire contract
+     itself proves it is out of the migration loop.
+   - The controller now BROADCASTS the full partition map (every AssignSector reaches every
+     federate); each federate keeps the whole map as `partitionMap`. On a departure the OWNER
+     computes the destination itself (half-open `ownerOf`, the same rule the controller used)
+     and sends the aircraft's exact state straight to that peer -- or logs "lost in the void"
+     if it left the world. Chose owner-computes-and-directs (Method A) over a broadcast/
+     volunteer auction (Method B): with a static, globally-known map every federate computes
+     the SAME single destination, so an auction is pure chatter.
+   - Stepping model: CONTINUOUS PER-AIRCRAFT, no global step, no catch-up. Each aircraft
+     carries its own `acStep_`; each serve-loop pass advances every owned aircraft one dt,
+     logs it, and hands it off if it left. A handed-off aircraft simply CONTINUES its step
+     sequence on the new owner (owner does 0..s, adopter does s+1..N). Simpler than the
+     planned global-step+catch-up and provably exactly-once under wall-clock skew.
+   - NDJSON changed to ONE LINE PER (aircraft, step) with an explicit `owner` field. Per-
+     aircraft-per-line is what makes coverage exactly-once across a handoff regardless of how
+     the two federates' loops interleave. The viewer already merges by id, so trajectories
+     render unchanged; the user also wired owner-per-frame coloring on the viz side.
+   VERIFIED with the user: `dff_diff k1 k2` -> PARTITION INVARIANCE HOLDS, 202/202 bit-exact,
+   ownership flipped (entity 1: A in k1, B in k2) while the truth stayed identical.
+
+3. RCB 3D PARTITION (ADR-0021) -- replaced the single-axis slab tiling with Recursive
+   Coordinate Bisection. `tileVolume(min,max,K)` starts with the world as one cell and K-1
+   times splits the LARGEST-volume cell at the geometric MIDPOINT of its LONGEST axis. Splits
+   the longest axis => cells lean cubic; splits the largest cell => the natural unequal ratios
+   for non-power-of-two K (K=3 -> 1:1:2, K=5 -> 1:1:2:2:2). Deterministic tie-breaks: largest
+   by volume then lowest index; longest axis then X->Y->Z. `slabOf`/`Axis`/`SPLIT_AXIS` are
+   gone; `cellOf`/`assignEntities` do half-open lookup over the cell list. THE FEDERATE NEEDED
+   NO CHANGE -- `ownerOf`/`inMySector` already scan an arbitrary cell list -- a direct payoff
+   of the peer design. The viewer draws the 3D cells for free from the controller descriptor.
+   NB: K=2 now splits on X (the longest side), not Y. WRITTEN; pending the user's compile.
+
+4. SEEDED SCENARIO GENERATOR -- `src/tools/gen_scenario.cpp` (standalone C++17, no RTI, like
+   dff_diff). `--seed/--count/--out/--speed-min/--speed-max`. Places aircraft uniformly in the
+   world with uniformly-random 3D velocity directions at random speeds, at setprecision(17)
+   for exact ICs. Some planes exit the world -> exercises the lost-in-the-void path; the rest
+   cross cell seams in every direction -> exercises 3D handoff. The user ran it ("works quite
+   decently") and spotted the orientation gap (below).
+
+5. NDJSON additions -- controller meta gained `"scenario":"<name>"` (basename of the CSV) for
+   the viewer to label the run. Federate departures now write EVENT lines:
+   `{"event":"handoff",...,"to":...}` and `{"event":"out_of_bounds",...}` (left the world).
+   Event lines carry `t`+`id` but no `{"id":...}` aircraft entry, so dff_diff ignores them
+   (no truth point) -- pure viewer metadata. Added an "all current tasks done" idle-transition
+   print to the serve loop (re-arms on a late adoption) so the operator can tell "still
+   crunching" from "just holding," which matters at many aircraft.
+
+THE PHYSICS GAP WE HIT (not a bug)
+----------------------------------
+The random generator makes aircraft MOVE in 3D, but they all still render nose ~+X with only
+a pitch bob. Confirmed the cause: the model (LinearLongitudinal) is LONGITUDINAL ONLY -- no
+lateral/yaw states at all -- so nothing turns the nose toward a lateral velocity. The vertical
+velocity component feeds the longitudinal `w` state and drives the pitch oscillation you see;
+the missing horizontal turn is pure yaw = lateral, which the model does not have. The `owner`
+quaternion IS logged correctly; it is a faithful output of a half-a-model. Charter-consistent
+(physics is filler). Fix options are (0) kinematic nose-follows-velocity, (1) a lateral-
+directional filler A-matrix, (2) full 6-DOF + wind coupling. USER DECISION: defer the nose-
+follows fix until real 6-DOF lands (no throwaway kinematic).
+
+VERIFIED vs PENDING (be honest in the report)
+---------------------------------------------
+- VERIFIED by the user this session: Layer 1; peer-to-peer handoff (k1 vs k2 bit-exact);
+  the seeded generator (ran it, saw output).
+- PENDING the user's next compile: RCB partition, the NDJSON event lines, the scenario tag,
+  the idle print. (All written; described here as such.)
+
+DECISIONS / NEW ADRs
+--------------------
+- ADR-0020  Peer-to-peer ownership handoff via a dedicated interaction (controller out of the
+            runtime loop). Refines ADR-0015's handoff clause.
+- ADR-0021  Recursive Coordinate Bisection for spatial partitioning (geometric, data-
+            independent). Refines ADR-0015's "K sectors."
+- ADR-0022  The controller owns the run window (a job = space x time); the independent
+            constructive core needs no HLA time management.
+
+KNOWN / CARRIED
+---------------
+- Benign JGroups TimeoutException on federate resign at teardown (caught; truth fully logged
+  first). Now that federates live longer serving handoffs, widen the controller's post-
+  Shutdown pump window if it recurs.
+- DDM (routing regions = sectors) remains the real answer to the receive-and-discard clutter
+  at large K; not needed yet (ADR-0015 already defers it).
+
+NEXT
+----
+Documentation sync (this entry + ADRs 0020-0022 + a charter Scope diff for the user to
+approve). Then the stretch, in the user's stated order of interest: LATERAL PHYSICS (toward
+JSE-ish accuracy; also unlocks nose-follows-velocity) and the WIND VECTOR FIELD (visuals +
+added physics; the aerodynamic RESPONSE to wind is the 6-DOF-hard half). Presentation prep
+begins the following day.
